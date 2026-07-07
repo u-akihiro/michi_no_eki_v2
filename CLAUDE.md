@@ -25,7 +25,7 @@
 | 認証             | Google OAuth                                        | -        |
 | 地図ライブラリ   | Leaflet + react-leaflet                             | -        |
 | 地図タイル       | OpenStreetMap公式                                   | ADR-0004 |
-| 開発環境         | Wrangler + Vite dev（ホスト直起動、Node 20 + pnpm） | -        |
+| 開発環境         | Wrangler + Vite dev（ホスト直起動、Node 22 + pnpm） | -        |
 | データ取得       | michi-no-eki.jp スクレイピング（TypeScript）        | ADR-0005 |
 
 ## コーディング規約

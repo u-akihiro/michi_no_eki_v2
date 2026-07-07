@@ -44,3 +44,6 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Check Worker static assets
+        run: test -f apps/api/dist/assets/index.html
