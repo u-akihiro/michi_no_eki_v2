@@ -28,6 +28,10 @@
 | 開発環境         | Wrangler + Vite dev（ホスト直起動、Node 20 + pnpm） | -        |
 | データ取得       | michi-no-eki.jp スクレイピング（TypeScript）        | ADR-0005 |
 
+## コーディング規約
+
+- **TypeScript の `verbatimModuleSyntax` が有効**: 型のみを import / export する箇所は `import type` / `export type` を明示すること。値と型を混在させた `import { Foo }` は型がランタイム参照として残り、Cloudflare Workers / Vite でビルドエラーになる。
+
 # モノレポ構成
 
 ```
