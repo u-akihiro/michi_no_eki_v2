@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 
-const app = new Hono()
+const app = new Hono<{ Bindings: { ASSETS: Fetcher } }>()
 
-app.get('/', (c) => c.text('Hello from api'))
+app.get('/api/health', (c) => c.text('Hello from api'))
 
 export default app
