@@ -13,20 +13,20 @@
 
 # 技術スタック
 
-| 領域 | 選定 | 関連ADR |
-| --- | --- | --- |
-| インフラ | Cloudflare (Workers / D1 / R2) | - |
-| リポジトリ構成 | pnpm workspaces モノレポ | ADR-0001 |
-| 言語 | TypeScript | ADR-0002 |
-| バックエンドFW | Hono (on Workers) | ADR-0002 |
-| フロントエンドFW | React + Vite (on Pages) | - |
-| UI | Tailwind CSS + shadcn/ui | ADR-0003 |
-| ORM | Drizzle ORM (D1) | - |
-| 認証 | Google OAuth | - |
-| 地図ライブラリ | Leaflet + react-leaflet | - |
-| 地図タイル | OpenStreetMap公式 | ADR-0004 |
-| 開発環境 | Wrangler + Vite dev（ホスト直起動、Node 20 + pnpm） | - |
-| データ取得 | michi-no-eki.jp スクレイピング（TypeScript） | ADR-0005 |
+| 領域             | 選定                                                | 関連ADR  |
+| ---------------- | --------------------------------------------------- | -------- |
+| インフラ         | Cloudflare (Workers / D1 / R2)                      | -        |
+| リポジトリ構成   | pnpm workspaces モノレポ                            | ADR-0001 |
+| 言語             | TypeScript                                          | ADR-0002 |
+| バックエンドFW   | Hono (on Workers)                                   | ADR-0002 |
+| フロントエンドFW | React + Vite (on Pages)                             | -        |
+| UI               | Tailwind CSS + shadcn/ui                            | ADR-0003 |
+| ORM              | Drizzle ORM (D1)                                    | -        |
+| 認証             | Google OAuth                                        | -        |
+| 地図ライブラリ   | Leaflet + react-leaflet                             | -        |
+| 地図タイル       | OpenStreetMap公式                                   | ADR-0004 |
+| 開発環境         | Wrangler + Vite dev（ホスト直起動、Node 20 + pnpm） | -        |
+| データ取得       | michi-no-eki.jp スクレイピング（TypeScript）        | ADR-0005 |
 
 # モノレポ構成
 
@@ -145,12 +145,15 @@ pnpm build   # 全体ビルド
 なぜこの決定が必要だったか
 
 ## 決定
+
 何を選んだか
 
 ## 理由
+
 なぜそれを選んだか、却下した選択肢
 
 ## 結果
+
 （後から追記）実際どうだったか
 ```
 
@@ -161,6 +164,7 @@ pnpm build   # 全体ビルド
 ## 役割分担
 
 ### Claude（プロジェクト管理者）
+
 - ユーザー要求の受け取りと要件整理
 - タスク分解と実行計画の策定
 - Codexへの作業依頼と成果物レビュー
@@ -169,6 +173,7 @@ pnpm build   # 全体ビルド
 - ユーザーとの対話・最終報告
 
 ### Codex（実作業者）
+
 - Claudeから依頼された単位のコード読解・実装・修正
 - テスト実行、ビルド、Lint等の検証コマンド実行
 - 依頼範囲内での事実確認とサマリ返却
@@ -179,11 +184,11 @@ pnpm build   # 全体ビルド
 
 `mcp__codex__codex` / `mcp__codex__codex-reply` を使う際の既定値。
 
-| 項目 | 既定値 | 備考 |
-| --- | --- | --- |
-| `sandbox` | `workspace-write` | 調査のみの場合は `read-only` を明示 |
-| `approval-policy` | `on-request` | 自律実行させたい定型作業のみ `never` |
-| `cwd` | プロジェクトルート | 明示指定する |
+| 項目              | 既定値             | 備考                                 |
+| ----------------- | ------------------ | ------------------------------------ |
+| `sandbox`         | `workspace-write`  | 調査のみの場合は `read-only` を明示  |
+| `approval-policy` | `on-request`       | 自律実行させたい定型作業のみ `never` |
+| `cwd`             | プロジェクトルート | 明示指定する                         |
 
 同一タスクの継続対話は必ず `codex-reply` でスレッドを維持する（毎回新規セッションを立てない）。
 

@@ -9,3 +9,18 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.wrangler/
+.vite/
+.turbo/
+*.tsbuildinfo
+coverage/
+
+# Environment
+.env*
+!.env.example
