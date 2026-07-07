@@ -10,10 +10,10 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "hono": "^4.12.27"
+    "hono": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260706.1",
+    "@cloudflare/workers-types": "catalog:",
     "typescript": "catalog:",
     "wrangler": "^4.107.0"
   }
