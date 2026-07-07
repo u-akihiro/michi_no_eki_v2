@@ -188,13 +188,22 @@ pnpm build   # 全体ビルド
 
 `mcp__codex__codex` / `mcp__codex__codex-reply` を使う際の既定値。
 
-| 項目              | 既定値             | 備考                                 |
-| ----------------- | ------------------ | ------------------------------------ |
-| `sandbox`         | `workspace-write`  | 調査のみの場合は `read-only` を明示  |
-| `approval-policy` | `on-request`       | 自律実行させたい定型作業のみ `never` |
-| `cwd`             | プロジェクトルート | 明示指定する                         |
+| 項目              | 既定値               | 備考                                                                 |
+| ----------------- | -------------------- | -------------------------------------------------------------------- |
+| `sandbox`         | `danger-full-access` | Windows で `workspace-write` だと pnpm/Node がホーム参照で止まるため |
+| `approval-policy` | `on-request`         | 自律実行させたい定型作業のみ `never`                                 |
+| `cwd`             | プロジェクトルート   | 明示指定する                                                         |
 
 同一タスクの継続対話は必ず `codex-reply` でスレッドを維持する（毎回新規セッションを立てない）。
+
+### sandbox 設定の背景
+
+- プロジェクトが `C:\Users\akihiro\projects\...` にあるため、Codex の `workspace-write` サンドボックスがホームディレクトリ（`C:\Users\akihiro`）へのアクセスを拒否する
+- これにより pnpm/Node の起動時に `lstat` が EPERM で止まり、pnpm install / typecheck / lint / format が全て実行不能になる
+- 代替案として「プロジェクトをホーム外に移動」があるが、今回は運用簡易性を優先して `danger-full-access` を採用
+- リスクは以下の限られた場面のみ意識すればよい:
+  - **スクレイピングタスク**: 外部HTMLを解析する場合、悪意ある指示混入の可能性 → `sandbox: read-only` に明示切替、または処理前に取得済みファイルを Claude が事前検査
+  - **未知の依存パッケージ導入**: postinstall スクリプトのリスク（これはサンドボックス設定に関わらず既存リスク）
 
 ## Codex への指示テンプレート
 
