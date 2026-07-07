@@ -24,6 +24,7 @@
 ### 移植は「機会があれば改良」
 
 旧repoロジックをベースにするが、以下の改善が可能なら合わせて取り込む:
+
 - レート制御の追加（旧repoにあれば踏襲）
 - リトライ・エラーハンドリング
 - 不要になったスクレイピング項目（例: 個別公式サイトへの二段階アクセス）の削除
@@ -31,11 +32,13 @@
 ### 実行モデルの段階的移行
 
 **MVP段階（ワンショット実行）:**
+
 1. ローカルで `pnpm --filter scraper scrape` を実行
 2. `apps/scraper/output/stations.json` に結果を出力
 3. `pnpm --filter api db:seed` でD1に投入
 
 **運用開始後（GitHub Actions定期実行に移行）:**
+
 1. GitHub Actionsのcron trigger（月次程度）で `apps/scraper` を実行
 2. 結果を wrangler CLI 経由でD1に書き込み
 3. 差分検出とアラートを組み込む
