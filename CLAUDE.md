@@ -19,7 +19,7 @@
 | リポジトリ構成   | pnpm workspaces モノレポ                            | ADR-0001 |
 | 言語             | TypeScript                                          | ADR-0002 |
 | バックエンドFW   | Hono (on Workers)                                   | ADR-0002 |
-| フロントエンドFW | React + Vite (on Pages)                             | -        |
+| フロントエンドFW | React + Vite (Workers Static Assets 経由)           | ADR-0007 |
 | UI               | Tailwind CSS + shadcn/ui                            | ADR-0003 |
 | ORM              | Drizzle ORM (D1)                                    | -        |
 | 認証             | Google OAuth                                        | -        |
@@ -37,8 +37,8 @@
 ```
 michi_no_eki_v2/
 ├── apps/
-│   ├── api/         # Workers + Hono
-│   ├── web/         # Pages + React + Vite
+│   ├── api/         # Workers + Hono（統合デプロイのエントリ、web の Static Assets も配信）
+│   ├── web/         # React + Vite（build 成果物が api の Static Assets として同梱される）
 │   └── scraper/     # データ取得スクリプト
 ├── packages/
 │   └── shared/      # 型定義・zodスキーマ・定数
@@ -53,10 +53,20 @@ michi_no_eki_v2/
 
 将来リポジトリ分割が必要になったときのコストを最小化するため、以下を守る。
 
-1. **`apps/*` 同士の相互import禁止** — appは常に独立
+1. **`apps/*` 同士の相互import禁止** — appは常に独立（build 時に `apps/web/dist` を `apps/api/dist/assets` にコピーする deploy 統合は例外、ソースレベルの参照ではない）
 2. **共有コードは `packages/shared` に配置** — 型・zodスキーマ・定数のみ
-3. **各appが独立ビルド・テスト・デプロイで完結する** — スクリプトはapp配下で完結
-4. **web ↔ api の通信は HTTP（Hono RPC or OpenAPI）に限定** — 直接コード参照しない
+3. **各appが独立ビルド・テスト・デプロイで完結する** — 各 app 自身の build/typecheck/lint は独立、deploy 統合は root の build script で担う
+4. **web ↔ api の通信は HTTP に限定** — 単一 Worker 内で同居しても、web からのAPI呼び出しは `fetch('/api/...')` 経由（同一 origin）
+
+## デプロイトポロジー
+
+**Workers-only 統合構成**（ADR-0007）:
+
+- 1 つの Cloudflare Worker で `apps/web`（Static Assets）と `apps/api`（Hono）を同時配信
+- ルーティング:
+  - `/api/*` → Hono (Worker) が処理
+  - それ以外 → Static Assets が処理、404 は SPA fallback で `index.html`
+- Cloudflare 側で管理するプロジェクトは 1 つ（Worker 名: `michi-no-eki`）
 
 # 開発ワークフロー
 
