@@ -4,3 +4,8 @@ packages:
 
 catalog:
   typescript: ^6.0.3
+
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true
