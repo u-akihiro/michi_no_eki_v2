@@ -4,11 +4,19 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
+    "scrape": "tsx src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@michi-no-eki/shared": "workspace:*",
+    "cheerio": "catalog:",
+    "uuid": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "tsx": "^4.23.0",
     "typescript": "catalog:"
   }
