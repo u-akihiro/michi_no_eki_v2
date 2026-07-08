@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { StationsSchema, type Station } from '@michi-no-eki/shared'
 import {
   buildStation,
@@ -15,6 +16,8 @@ const DEFAULT_OUTPUT = 'output/stations.json'
 const DEFAULT_DELAY_MS = 1000
 const DEFAULT_TIMEOUT_MS = 10_000
 const DEFAULT_MAX_RETRIES = 3
+const DEFAULT_EMPTY_LIST_MAX_RETRIES = 3
+const DEFAULT_EMPTY_LIST_BACKOFF_MS = 500
 const USER_AGENT =
   'michi-no-eki-v2-scraper/0.1 (+https://github.com/u-akihiro/michi_no_eki_v2)'
 
@@ -23,6 +26,18 @@ type CliOptions = {
   limit: number | null
   delayMs: number
   allowMissingCoords: boolean
+}
+
+type CollectListRefsOptions = {
+  firstListHtml: string
+  lastPage: number
+  limit: number | null
+  delayMs: number
+  fetchListPage: (page: number) => Promise<string>
+  sleepMs?: (ms: number) => Promise<void>
+  logger?: (message: string) => void
+  emptyListMaxRetries?: number
+  emptyListBackoffMs?: number
 }
 
 async function main(): Promise<void> {
@@ -38,24 +53,15 @@ async function main(): Promise<void> {
   const lastPage = extractLastPage(firstListHtml)
   console.log(`last page: ${lastPage} (pages 0..${lastPage})`)
 
-  const refs: StationRef[] = []
-  for (let page = 0; page <= lastPage; page += 1) {
-    const html =
-      page === 0
-        ? firstListHtml
-        : await fetchTextWithRetry(listUrl(page), fetchOptions)
-    refs.push(...extractStationRefs(html))
-    console.log(
-      `list page ${page}: collected ${refs.length} detail refs so far`,
-    )
-    if (options.limit !== null && refs.length >= options.limit) {
-      refs.length = options.limit
-      break
-    }
-    if (page < lastPage) {
-      await sleep(options.delayMs)
-    }
-  }
+  const refs = await collectListRefs({
+    firstListHtml,
+    lastPage,
+    limit: options.limit,
+    delayMs: options.delayMs,
+    fetchListPage: (page) => fetchTextWithRetry(listUrl(page), fetchOptions),
+    sleepMs: sleep,
+    logger: console.log,
+  })
 
   const stations: Station[] = []
   const missingCoords: string[] = []
@@ -173,7 +179,92 @@ function listUrl(page: number): string {
   return `${BASE_URL}/stations/search/all/all/all?page=${page}`
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error))
-  process.exitCode = 1
-})
+export async function collectListRefs(
+  options: CollectListRefsOptions,
+): Promise<StationRef[]> {
+  const refs: StationRef[] = []
+  const seen = new Set<number>()
+  const sleepMs = options.sleepMs ?? sleep
+  const logger = options.logger ?? (() => {})
+  const emptyListMaxRetries =
+    options.emptyListMaxRetries ?? DEFAULT_EMPTY_LIST_MAX_RETRIES
+  const emptyListBackoffMs =
+    options.emptyListBackoffMs ?? DEFAULT_EMPTY_LIST_BACKOFF_MS
+
+  for (let page = 0; page <= options.lastPage; page += 1) {
+    const pageRefs = await fetchNonEmptyListRefs({
+      page,
+      firstListHtml: options.firstListHtml,
+      fetchListPage: options.fetchListPage,
+      sleepMs,
+      emptyListMaxRetries,
+      emptyListBackoffMs,
+    })
+    let added = 0
+
+    for (const ref of pageRefs) {
+      if (seen.has(ref.sourceStationId)) {
+        continue
+      }
+      seen.add(ref.sourceStationId)
+      refs.push(ref)
+      added += 1
+
+      if (options.limit !== null && refs.length >= options.limit) {
+        break
+      }
+    }
+
+    logger(`list page ${page}: +${added} refs (total ${refs.length})`)
+
+    if (options.limit !== null && refs.length >= options.limit) {
+      break
+    }
+    if (page < options.lastPage) {
+      await sleepMs(options.delayMs)
+    }
+  }
+
+  return refs
+}
+
+async function fetchNonEmptyListRefs(options: {
+  page: number
+  firstListHtml: string
+  fetchListPage: (page: number) => Promise<string>
+  sleepMs: (ms: number) => Promise<void>
+  emptyListMaxRetries: number
+  emptyListBackoffMs: number
+}): Promise<StationRef[]> {
+  for (let attempt = 0; attempt <= options.emptyListMaxRetries; attempt += 1) {
+    const html =
+      options.page === 0 && attempt === 0
+        ? options.firstListHtml
+        : await options.fetchListPage(options.page)
+    const refs = extractStationRefs(html)
+    if (refs.length > 0) {
+      return refs
+    }
+    if (attempt < options.emptyListMaxRetries) {
+      await options.sleepMs(options.emptyListBackoffMs * 2 ** attempt)
+    }
+  }
+
+  throw new Error(
+    `list page ${options.page} returned 0 station refs after ${options.emptyListMaxRetries + 1} attempt(s)`,
+  )
+}
+
+function isCliEntrypoint(): boolean {
+  const entrypoint = process.argv[1]
+  return (
+    entrypoint !== undefined && fileURLToPath(import.meta.url) === entrypoint
+  )
+}
+
+if (isCliEntrypoint()) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  })
+}
