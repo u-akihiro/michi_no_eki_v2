@@ -21,6 +21,7 @@ dist/
 *.tsbuildinfo
 coverage/
 apps/scraper/output/
+apps/api/drizzle/seed/
 
 # Environment
 .env*
