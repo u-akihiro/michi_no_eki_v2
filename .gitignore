@@ -20,6 +20,7 @@ dist/
 .turbo/
 *.tsbuildinfo
 coverage/
+apps/scraper/output/
 
 # Environment
 .env*
