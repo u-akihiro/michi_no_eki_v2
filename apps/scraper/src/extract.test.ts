@@ -216,6 +216,58 @@ describe('ids and schema', () => {
     assert.equal(StationSchema.safeParse(result.station).success, true)
   })
 
+  it('uses manual coordinate override for source station 22788', () => {
+    const mapCoords = extractMapCoords(`
+      <iframe src="https://www.google.com/maps/embed/v1/place?q=34.048072522450944,35.9624087621255&key=abc"></iframe>
+    `)
+    const result = buildStation(
+      {
+        path: '/stations/views/22788',
+        sourceStationId: 22788,
+        prefectureName: '奈良県',
+      },
+      {
+        name: 'きなりの郷 下北山',
+        address: '奈良県吉野郡下北山村上池原1026番地',
+        homepageUrl: null,
+        prefectureCode: 29,
+        coords: mapCoords.coords,
+        warnings: mapCoords.warnings,
+      },
+    )
+
+    assert.equal(mapCoords.coords, null)
+    assert.deepEqual(result.errors, [])
+    assert.ok(result.station)
+    assert.equal(result.station.latitude, 34.048072522450944)
+    assert.equal(result.station.longitude, 135.9624087621255)
+    assert.equal(StationSchema.safeParse(result.station).success, true)
+  })
+
+  it('keeps missing-coordinate behavior for stations without an override', () => {
+    const mapCoords = extractMapCoords(`
+      <iframe src="https://www.google.com/maps/embed/v1/place?q=34.048072522450944,35.9624087621255&key=abc"></iframe>
+    `)
+    const result = buildStation(
+      {
+        path: '/stations/views/18786',
+        sourceStationId: 18786,
+        prefectureName: '奈良県',
+      },
+      {
+        name: 'override対象外',
+        address: '奈良県吉野郡下北山村上池原1026番地',
+        homepageUrl: null,
+        prefectureCode: 29,
+        coords: mapCoords.coords,
+        warnings: mapCoords.warnings,
+      },
+    )
+
+    assert.equal(result.station, null)
+    assert.deepEqual(result.errors, ['missing valid map coordinates'])
+  })
+
   it('keeps prefecture code constants aligned with JIS codes', () => {
     assert.equal(PREFECTURE_CODE_BY_NAME.北海道, 1)
     assert.equal(PREFECTURE_CODE_BY_NAME.沖縄県, 47)
