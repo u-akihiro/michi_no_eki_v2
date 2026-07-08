@@ -27,6 +27,8 @@ export type DetailExtractResult = {
   warnings: string[]
 }
 
+type Coordinates = { latitude: number; longitude: number }
+
 const PREFECTURE_NAMES = Object.keys(PREFECTURE_CODE_BY_NAME)
 const POSTAL_CODE_RE = /〒?\s*\d{3}[-－]\d{3,4}\s*|〒?\s*\d{7}\s*/g
 const MAP_Q_RE = /(?:\?|&)q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:&|$)/
@@ -35,6 +37,16 @@ const JP_LAT_MIN = 20
 const JP_LAT_MAX = 46
 const JP_LON_MIN = 122
 const JP_LON_MAX = 154
+
+// michi-no-eki.jp の「きなりの郷 下北山」は iframe 経度が typo（先頭桁欠落,
+// 35.96→135.96）で日本範囲外になるため手動補正する。
+// 参照: https://www.michi-no-eki.jp/stations/views/22788 。ソース側が修正されたらエントリ削除可。
+const STATION_COORD_OVERRIDES: Record<number, Coordinates> = {
+  22788: {
+    latitude: 34.048072522450944,
+    longitude: 135.9624087621255,
+  },
+}
 
 export function extractLastPage(html: string): number {
   const $ = load(html)
@@ -203,6 +215,7 @@ export function buildStation(
   detail: DetailExtractResult,
 ): { station: Station | null; errors: string[] } {
   const errors: string[] = []
+  const coords = STATION_COORD_OVERRIDES[ref.sourceStationId] ?? detail.coords
   if (detail.name === '') {
     errors.push('missing station name')
   }
@@ -212,14 +225,10 @@ export function buildStation(
   if (detail.prefectureCode === null) {
     errors.push(`missing prefecture code for address "${detail.address}"`)
   }
-  if (detail.coords === null) {
+  if (coords === null) {
     errors.push('missing valid map coordinates')
   }
-  if (
-    errors.length > 0 ||
-    detail.prefectureCode === null ||
-    detail.coords === null
-  ) {
+  if (errors.length > 0 || detail.prefectureCode === null || coords === null) {
     return { station: null, errors }
   }
 
@@ -231,8 +240,8 @@ export function buildStation(
       prefectureCode: detail.prefectureCode,
       address: detail.address,
       homepageUrl: detail.homepageUrl,
-      latitude: detail.coords.latitude,
-      longitude: detail.coords.longitude,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
     },
     errors,
   }
