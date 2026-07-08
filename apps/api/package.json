@@ -9,16 +9,22 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply michieki_db --local",
     "db:migrate:remote": "wrangler d1 migrations apply michieki_db --remote",
+    "db:seed:generate": "node --import tsx src/scripts/generate-stations-seed.ts",
+    "db:seed:local": "pnpm db:seed:generate && wrangler d1 execute michieki_db --local --file=drizzle/seed/stations.sql",
+    "db:seed:remote": "pnpm db:seed:generate && wrangler d1 execute michieki_db --remote --file=drizzle/seed/stations.sql",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"
   },
   "dependencies": {
+    "@michi-no-eki/shared": "workspace:*",
     "drizzle-orm": "catalog:",
     "hono": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
+    "@types/node": "catalog:",
     "drizzle-kit": "catalog:",
+    "tsx": "^4.23.0",
     "typescript": "catalog:",
     "wrangler": "catalog:"
   }

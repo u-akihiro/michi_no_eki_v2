@@ -2,6 +2,7 @@ import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 export const stations = sqliteTable('stations', {
   id: text('id').primaryKey(),
+  sourceStationId: integer('source_station_id').notNull().unique(),
   prefectureCode: integer('prefecture_code').notNull(),
   name: text('name').notNull(),
   address: text('address').notNull(),
