@@ -1,7 +1,11 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { mkdir, open, readFile, rm, writeFile } from 'node:fs/promises'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { StationsSchema, type Station } from '@michi-no-eki/shared'
+import {
+  StationSchema,
+  StationsSchema,
+  type Station,
+} from '@michi-no-eki/shared'
 import {
   buildStation,
   extractLastPage,
@@ -15,7 +19,9 @@ const BASE_URL = 'https://www.michi-no-eki.jp'
 const DEFAULT_OUTPUT = 'output/stations.json'
 const DEFAULT_DELAY_MS = 1000
 const DEFAULT_TIMEOUT_MS = 10_000
-const DEFAULT_MAX_RETRIES = 3
+const DEFAULT_MAX_RETRIES = 7
+const DEFAULT_RETRY_BASE_DELAY_MS = 1_000
+const DEFAULT_RETRY_MAX_DELAY_MS = 30_000
 const DEFAULT_EMPTY_LIST_MAX_RETRIES = 3
 const DEFAULT_EMPTY_LIST_BACKOFF_MS = 500
 const USER_AGENT =
@@ -26,6 +32,7 @@ type CliOptions = {
   limit: number | null
   delayMs: number
   allowMissingCoords: boolean
+  fresh: boolean
 }
 
 type CollectListRefsOptions = {
@@ -40,11 +47,25 @@ type CollectListRefsOptions = {
   emptyListBackoffMs?: number
 }
 
+type ScrapeStationDetailsOptions = {
+  refs: StationRef[]
+  output: string
+  delayMs: number
+  allowMissingCoords: boolean
+  fresh: boolean
+  fetchDetailPage: (ref: StationRef) => Promise<string>
+  sleepMs?: (ms: number) => Promise<void>
+  logger?: (message: string) => void
+  warnLogger?: (message: string) => void
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2))
   const fetchOptions = {
     timeoutMs: DEFAULT_TIMEOUT_MS,
     maxRetries: DEFAULT_MAX_RETRIES,
+    retryBaseDelayMs: DEFAULT_RETRY_BASE_DELAY_MS,
+    retryMaxDelayMs: DEFAULT_RETRY_MAX_DELAY_MS,
     userAgent: USER_AGENT,
   }
 
@@ -63,55 +84,18 @@ async function main(): Promise<void> {
     logger: console.log,
   })
 
-  const stations: Station[] = []
-  const missingCoords: string[] = []
-  const skipped: string[] = []
-
-  for (const [index, ref] of refs.entries()) {
-    const detailUrl = `${BASE_URL}${ref.path}`
-    const html = await fetchTextWithRetry(detailUrl, fetchOptions)
-    const detail = extractStationDetail(html, ref.prefectureName)
-    for (const warning of detail.warnings) {
-      console.warn(`warning: ${detailUrl}: ${warning}`)
-    }
-
-    const built = buildStation(ref, detail)
-    if (built.station === null) {
-      const message = `${detailUrl}: ${built.errors.join(', ')}`
-      if (built.errors.includes('missing valid map coordinates')) {
-        missingCoords.push(message)
-      } else {
-        skipped.push(message)
-      }
-      console.warn(`warning: skipping ${message}`)
-    } else {
-      stations.push(built.station)
-      console.log(
-        `[${index + 1}/${refs.length}] ${built.station.name} (${built.station.sourceStationId})`,
-      )
-    }
-
-    if (index < refs.length - 1) {
-      await sleep(options.delayMs)
-    }
-  }
-
-  if (missingCoords.length > 0 && !options.allowMissingCoords) {
-    throw new Error(
-      `${missingCoords.length} station(s) lack valid iframe coordinates:\n${missingCoords.join('\n')}`,
-    )
-  }
-  if (skipped.length > 0) {
-    throw new Error(
-      `${skipped.length} station(s) could not be extracted:\n${skipped.join('\n')}`,
-    )
-  }
-
-  const validated = StationsSchema.parse(stations)
-  const outputPath = resolve(options.output)
-  await mkdir(dirname(outputPath), { recursive: true })
-  await writeFile(outputPath, `${JSON.stringify(validated, null, 2)}\n`, 'utf8')
-  console.log(`wrote ${validated.length} station(s) to ${outputPath}`)
+  await scrapeStationDetails({
+    refs,
+    output: options.output,
+    delayMs: options.delayMs,
+    allowMissingCoords: options.allowMissingCoords,
+    fresh: options.fresh,
+    fetchDetailPage: (ref) =>
+      fetchTextWithRetry(`${BASE_URL}${ref.path}`, fetchOptions),
+    sleepMs: sleep,
+    logger: console.log,
+    warnLogger: console.warn,
+  })
 }
 
 function parseArgs(args: string[]): CliOptions {
@@ -120,6 +104,7 @@ function parseArgs(args: string[]): CliOptions {
     limit: null,
     delayMs: DEFAULT_DELAY_MS,
     allowMissingCoords: false,
+    fresh: false,
   }
 
   for (let index = 0; index < args.length; index += 1) {
@@ -142,6 +127,9 @@ function parseArgs(args: string[]): CliOptions {
         break
       case '--allow-missing-coords':
         options.allowMissingCoords = true
+        break
+      case '--fresh':
+        options.fresh = true
         break
       default:
         throw new Error(`unknown argument: ${arg ?? ''}`)
@@ -226,6 +214,140 @@ export async function collectListRefs(
   }
 
   return refs
+}
+
+export async function scrapeStationDetails(
+  options: ScrapeStationDetailsOptions,
+): Promise<Station[]> {
+  const sleepMs = options.sleepMs ?? sleep
+  const logger = options.logger ?? (() => {})
+  const warnLogger = options.warnLogger ?? (() => {})
+  const outputPath = resolve(options.output)
+  const checkpointPath = checkpointPathForOutput(outputPath)
+
+  await mkdir(dirname(outputPath), { recursive: true })
+  if (options.fresh) {
+    await rm(checkpointPath, { force: true })
+  }
+
+  const stationsBySourceId = await loadCheckpoint(checkpointPath)
+  const missingCoords: string[] = []
+  const skipped: string[] = []
+
+  if (stationsBySourceId.size > 0) {
+    logger(`loaded ${stationsBySourceId.size} checkpoint station(s)`)
+  }
+
+  for (const [index, ref] of options.refs.entries()) {
+    if (stationsBySourceId.has(ref.sourceStationId)) {
+      logger(
+        `[${index + 1}/${options.refs.length}] skipped checkpointed ${ref.sourceStationId}`,
+      )
+      continue
+    }
+
+    const detailUrl = `${BASE_URL}${ref.path}`
+    const html = await options.fetchDetailPage(ref)
+    const detail = extractStationDetail(html, ref.prefectureName)
+    for (const warning of detail.warnings) {
+      warnLogger(`warning: ${detailUrl}: ${warning}`)
+    }
+
+    const built = buildStation(ref, detail)
+    if (built.station === null) {
+      const message = `${detailUrl}: ${built.errors.join(', ')}`
+      if (built.errors.includes('missing valid map coordinates')) {
+        missingCoords.push(message)
+      } else {
+        skipped.push(message)
+      }
+      warnLogger(`warning: skipping ${message}`)
+    } else {
+      stationsBySourceId.set(built.station.sourceStationId, built.station)
+      await appendCheckpointStation(checkpointPath, built.station)
+      logger(
+        `[${index + 1}/${options.refs.length}] ${built.station.name} (${built.station.sourceStationId})`,
+      )
+    }
+
+    if (index < options.refs.length - 1) {
+      await sleepMs(options.delayMs)
+    }
+  }
+
+  if (missingCoords.length > 0 && !options.allowMissingCoords) {
+    throw new Error(
+      `${missingCoords.length} station(s) lack valid iframe coordinates:\n${missingCoords.join('\n')}`,
+    )
+  }
+  if (skipped.length > 0) {
+    throw new Error(
+      `${skipped.length} station(s) could not be extracted:\n${skipped.join('\n')}`,
+    )
+  }
+
+  const stations = options.refs
+    .map((ref) => stationsBySourceId.get(ref.sourceStationId))
+    .filter((station): station is Station => station !== undefined)
+  const validated = StationsSchema.parse(stations)
+  await writeFile(outputPath, `${JSON.stringify(validated, null, 2)}\n`, 'utf8')
+  await rm(checkpointPath, { force: true })
+  logger(`wrote ${validated.length} station(s) to ${outputPath}`)
+  return validated
+}
+
+function checkpointPathForOutput(outputPath: string): string {
+  const extension = extname(outputPath)
+  const name = basename(outputPath, extension)
+  return join(dirname(outputPath), `${name}.checkpoint.jsonl`)
+}
+
+async function loadCheckpoint(path: string): Promise<Map<number, Station>> {
+  let content: string
+  try {
+    content = await readFile(path, 'utf8')
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      return new Map()
+    }
+    throw error
+  }
+
+  const lines = content.split(/\r?\n/)
+  const stations = new Map<number, Station>()
+  for (const [index, line] of lines.entries()) {
+    if (line.trim() === '') {
+      continue
+    }
+    try {
+      const station = StationSchema.parse(JSON.parse(line))
+      stations.set(station.sourceStationId, station)
+    } catch (error) {
+      if (index === lines.length - 1) {
+        break
+      }
+      throw error
+    }
+  }
+  return stations
+}
+
+async function appendCheckpointStation(
+  path: string,
+  station: Station,
+): Promise<void> {
+  await mkdir(dirname(path), { recursive: true })
+  const file = await open(path, 'a')
+  try {
+    await file.write(`${JSON.stringify(station)}\n`, undefined, 'utf8')
+    await file.sync()
+  } finally {
+    await file.close()
+  }
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error
 }
 
 async function fetchNonEmptyListRefs(options: {
