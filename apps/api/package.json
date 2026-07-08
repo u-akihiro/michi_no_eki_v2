@@ -6,14 +6,19 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "build": "wrangler deploy --dry-run --outdir=dist/worker",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply michieki_db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply michieki_db --remote",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"
   },
   "dependencies": {
+    "drizzle-orm": "catalog:",
     "hono": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
+    "drizzle-kit": "catalog:",
     "typescript": "catalog:",
     "wrangler": "catalog:"
   }
