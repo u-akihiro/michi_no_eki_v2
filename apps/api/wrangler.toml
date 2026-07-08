@@ -10,7 +10,7 @@ run_worker_first = ["/api/*"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "michi-no-eki-db"
-database_id = "00000000-0000-0000-0000-000000000000"
-# preview_database_id = "00000000-0000-0000-0000-000000000000"
+database_name = "michieki_db"
+database_id = "3098bf1d-be3a-4872-9714-6baac1b8dc0d"
+# preview_database_id = "<preview-database-id>"  # 本番と Preview で D1 を分離する場合に設定
 migrations_dir = "drizzle"

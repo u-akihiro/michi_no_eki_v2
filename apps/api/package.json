@@ -7,8 +7,8 @@
     "deploy": "wrangler deploy",
     "build": "wrangler deploy --dry-run --outdir=dist/worker",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply michi-no-eki-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply michi-no-eki-db --remote",
+    "db:migrate:local": "wrangler d1 migrations apply michieki_db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply michieki_db --remote",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"
   },
