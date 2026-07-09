@@ -18,7 +18,7 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 
 const JAPAN_CENTER: [number, number] = [36.5, 138]
 const INITIAL_ZOOM = 5
-const PREFECTURE_CLUSTER_ZOOM_THRESHOLD = 7
+const PREFECTURE_CLUSTER_ZOOM_THRESHOLD = 10
 const CLUSTER_FIT_BOUNDS_PADDING = L.point(32, 32)
 
 type PrefectureCluster = {
