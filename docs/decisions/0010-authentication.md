@@ -1,4 +1,4 @@
-# 認証方式: サーバサイドセッション + Google OAuth（@hono/oauth-providers）
+# 認証方式: サーバサイドセッション + Google OAuth（arctic）
 
 ## 状況
 
@@ -26,11 +26,18 @@ sessions (D1) ──→ user_id ──→ users (D1)
 
 ### OAuth プロトコル
 
-Google OAuth 2.0（認可コードフロー）のプロトコル処理は **`@hono/oauth-providers` の googleAuth ミドルウェア**に委ねる。
+Google OAuth 2.0 / OIDC（認可コードフロー）のプロトコル処理は **`arctic`**（Lucia 作者・セキュリティ志向・Workers 対応）に委ねる。
 
-- **責任分界点**: ライブラリ = OAuth プロトコルの正しさ（Google へのリダイレクト、state、code→token 交換、Google プロフィール取得）とその上流セキュリティ修正。**我々** = 検証済み Google ID を受けた後の users upsert / セッション発行 / session_id Cookie / セッション検証 / logout / API の CSRF。
-- redirect URI は `/auth/google/callback` に固定（ライブラリの redirect_uri を明示指定）。
-- **state(CSRF) はライブラリの責任範囲**に入るため、実装時に「その版が state を保存し callback で検証するか」を確認する。不足時は自前 `oauth_state` Cookie 検証を重ねる（多層防御）。
+> **経緯（当初 @hono/oauth-providers を予定→arctic に変更）**: 当初は公式の `@hono/oauth-providers` を「責任分界が明確」として採用予定だったが、実装前チェックで実ソースを確認したところ、認証基盤として不適な defect が判明したため arctic に切り替えた:
+>
+> - **Google token 交換が非準拠**: `getTokenFromCode` が `content-type: application/json` かつ body のキーが `clientId` / `clientSecret`（camelCase）。Google は `application/x-www-form-urlencoded` + `client_id` / `client_secret`（snake_case）を要求するため、camelCase のクライアント認証情報を認識できず token 交換が失敗する見込み。
+> - **state(CSRF) の乱数が非セキュア**: `Math.random()` ベースで生成しており、Cloudflare 公式が security 用途で禁じている手法。
+>
+> これらはライブラリが「自分の責任範囲（安全な state + 正しい token 交換）」を果たせていないことを意味し、採用理由（信頼できる責任分界）が成立しない。
+
+- **責任分界点**: `arctic` = OAuth2/OIDC プロトコルの正しさ（認可 URL 生成、state/PKCE、code→token 交換、id_token の取得）。**我々** = state/PKCE の保存と検証（arctic のヘルパーで我々が Cookie に保持）、id_token から `sub`/email/name/picture の取得、users upsert / セッション発行 / session_id Cookie / セッション検証 / logout / API の CSRF。
+- redirect URI は `/auth/google/callback` に固定。
+- **state / PKCE は我々の管理下**（arctic が値を生成、我々が短命 Cookie に保存し callback で照合）。session_id と同様に Web Crypto 由来の安全な値。
 
 ### 認証フロー
 
@@ -53,13 +60,13 @@ Google OAuth 2.0（認可コードフロー）のプロトコル処理は **`@ho
 ## 理由
 
 - **JWT を選ばない**: revoke 機構が無く漏洩時に有効期限まで失効不能。単一 backend + 単一 DB では stateless の利点が薄い。セッション方式は即時失効可能。
-- **@hono/oauth-providers を選ぶ**: 責任分界点が明確（OAuth プロトコルはライブラリ・上流追従、セッション/認可は自前）。公式 Hono パッケージで統合が密。唯一の弱点（state 制御がライブラリ内部）は実装前チェックのゲートで担保。
+- **arctic を選ぶ**: OAuth2/OIDC プロトコルを正しく実装した軽量ライブラリ（正しい Google token 交換、state/PKCE、id_token 取得）。state/PKCE は我々が Cookie に保持して検証するため、CSRF 防御の中核を自分でコントロールできる。セッション管理は自前(D1)で持つ。
 - **同一オリジンの活用**: 旧repoが CloudFront で達成した同一オリジン化を、v2 は単一 Worker で最初から満たすため、CORS・プロキシ・別オリジン Cookie の複雑さが無い。
 
 ### 却下した選択肢
 
 - **JWT（localStorage / Cookie）**: XSS/revoke リスク。ADR-0028 と同じ理由で却下。
-- **arctic 等で OAuth を自前配線**: state を自分で持てる利点はあるが、責任分界点の明確さと実装量で @hono/oauth-providers を優先。state 検証が不十分だった場合の切替候補として保持。
+- **@hono/oauth-providers**: 責任分界の明確さと実装量で当初有力だったが、実装前チェックで Google token 交換の非準拠（JSON + camelCase の client 認証情報）と state の非セキュア乱数（`Math.random`）が判明し、認証基盤として不適と判断して却下（上記「経緯」参照）。
 
 ## 結果
 

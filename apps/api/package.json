@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@michi-no-eki/shared": "workspace:*",
+    "arctic": "catalog:",
     "drizzle-orm": "catalog:",
     "hono": "catalog:"
   },

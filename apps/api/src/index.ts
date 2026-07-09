@@ -1,12 +1,43 @@
 import { Hono } from 'hono'
 import type { Station } from '@michi-no-eki/shared'
+import {
+  completeGoogleLogin,
+  csrfProtection,
+  getCurrentUser,
+  logout,
+  startGoogleLogin,
+} from './auth'
 import { createDb } from './db/client'
 import { stations } from './db/schema'
 import type { Env } from './env'
 
 const app = new Hono<{ Bindings: Env }>()
 
+app.use('/api/*', csrfProtection())
+app.use('/auth/logout', csrfProtection())
+
 app.get('/api/health', (c) => c.text('Hello from api'))
+
+app.get('/auth/google/login', (c) => startGoogleLogin(c))
+
+app.get('/auth/google/callback', async (c) => {
+  const db = createDb(c.env.DB)
+  return completeGoogleLogin(c, db)
+})
+
+app.get('/api/me', async (c) => {
+  const db = createDb(c.env.DB)
+  const user = await getCurrentUser(c, db)
+  if (!user) {
+    return c.json({ error: 'unauthorized' }, 401)
+  }
+  return c.json({ user })
+})
+
+app.post('/auth/logout', async (c) => {
+  const db = createDb(c.env.DB)
+  return logout(c, db)
+})
 
 app.get('/api/stations', async (c) => {
   const db = createDb(c.env.DB)
