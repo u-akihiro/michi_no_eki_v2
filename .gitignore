@@ -10,6 +10,9 @@ Thumbs.db
 .idea/
 *.swp
 
+# Codex tooling logs
+.codex-logs/
+
 # Dependencies
 node_modules/
 
