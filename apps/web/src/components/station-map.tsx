@@ -131,19 +131,34 @@ function fitPrefectureStations(map: L.Map, stations: Station[]) {
   })
 }
 
-function StationMapMarkers({ stations }: { stations: Station[] }) {
+function MapZoomWatcher({
+  onZoomChange,
+}: {
+  onZoomChange: (zoom: number) => void
+}) {
   const map = useMap()
-  const [zoom, setZoom] = useState(() => map.getZoom())
+
+  useMapEvents({
+    zoomend: () => {
+      onZoomChange(map.getZoom())
+    },
+  })
+
+  return null
+}
+
+function StationMapMarkers({
+  stations,
+  zoom,
+}: {
+  stations: Station[]
+  zoom: number
+}) {
+  const map = useMap()
   const prefectureClusters = useMemo(
     () => createPrefectureClusters(stations),
     [stations],
   )
-
-  useMapEvents({
-    zoomend: () => {
-      setZoom(map.getZoom())
-    },
-  })
 
   if (zoom < PREFECTURE_CLUSTER_ZOOM_THRESHOLD) {
     return (
@@ -188,6 +203,7 @@ export function StationMap() {
   const [stations, setStations] = useState<Station[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [zoom, setZoom] = useState(INITIAL_ZOOM)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -238,8 +254,13 @@ export function StationMap() {
           attribution="&copy; OpenStreetMap contributors"
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <StationMapMarkers stations={stations} />
+        <MapZoomWatcher onZoomChange={setZoom} />
+        <StationMapMarkers stations={stations} zoom={zoom} />
       </MapContainer>
+
+      <div className="pointer-events-none absolute bottom-3 left-3 z-[1000] rounded bg-white/90 px-2 py-1 text-xs font-medium text-slate-900 shadow">
+        zoom: {zoom}
+      </div>
 
       {(isLoading || errorMessage !== null) && (
         <div className="pointer-events-none absolute left-3 top-3 z-[1000] rounded bg-white px-3 py-2 text-sm text-slate-900 shadow">
