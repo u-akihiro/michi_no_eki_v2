@@ -1,4 +1,4 @@
-# 認証方式: サーバサイドセッション + Google OAuth（@hono/oauth-providers）
+# 認証方式: サーバサイドセッション + Google OAuth（arctic）
 
 ## 状況
 
