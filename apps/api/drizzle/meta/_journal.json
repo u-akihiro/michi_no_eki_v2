@@ -15,6 +15,13 @@
       "when": 1783500312214,
       "tag": "0001_legal_starhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1783569708365,
+      "tag": "0002_cynical_sister_grimm",
+      "breakpoints": true
     }
   ]
 }
