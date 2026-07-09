@@ -2,6 +2,10 @@ export type FetchOptions = {
   timeoutMs: number
   maxRetries: number
   userAgent: string
+  retryBaseDelayMs?: number
+  retryMaxDelayMs?: number
+  fetchImpl?: typeof fetch
+  sleepMs?: (ms: number) => Promise<void>
 }
 
 export async function fetchTextWithRetry(
@@ -9,12 +13,14 @@ export async function fetchTextWithRetry(
   options: FetchOptions,
 ): Promise<string> {
   let lastError: unknown
+  const fetchImpl = options.fetchImpl ?? fetch
+  const sleepMs = options.sleepMs ?? sleep
 
   for (let attempt = 0; attempt <= options.maxRetries; attempt += 1) {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs)
     try {
-      const response = await fetch(url, {
+      const response = await fetchImpl(url, {
         headers: { 'user-agent': options.userAgent },
         signal: controller.signal,
       })
@@ -27,7 +33,7 @@ export async function fetchTextWithRetry(
       if (attempt === options.maxRetries) {
         break
       }
-      await sleep(backoffMs(attempt))
+      await sleepMs(backoffMs(attempt, options))
     } finally {
       clearTimeout(timeout)
     }
@@ -42,6 +48,8 @@ export function sleep(ms: number): Promise<void> {
   })
 }
 
-function backoffMs(attempt: number): number {
-  return 500 * 2 ** attempt
+function backoffMs(attempt: number, options: FetchOptions): number {
+  const baseDelayMs = options.retryBaseDelayMs ?? 1_000
+  const maxDelayMs = options.retryMaxDelayMs ?? 30_000
+  return Math.min(baseDelayMs * 2 ** attempt, maxDelayMs)
 }
