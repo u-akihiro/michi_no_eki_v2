@@ -10,8 +10,14 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 
-import { PREFECTURE_CODE_BY_NAME } from '@michi-no-eki/shared'
+import {
+  PREFECTURE_CODE_BY_NAME,
+  PREFECTURE_NAME_BY_CODE,
+  REGIONS,
+} from '@michi-no-eki/shared'
 import type { Station } from '@michi-no-eki/shared'
+
+import { StationFilter } from './station-filter'
 
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
@@ -33,9 +39,7 @@ type PrefectureCluster = {
   position: [number, number]
 }
 
-const PREFECTURE_NAME_BY_CODE = new Map<number, string>(
-  Object.entries(PREFECTURE_CODE_BY_NAME).map(([name, code]) => [code, name]),
-)
+const ALL_PREFECTURE_CODES = Object.values(PREFECTURE_CODE_BY_NAME)
 
 // バンドラ環境ではデフォルトアイコンのURL自動解決が効かないため、
 // インポート済みの画像URLで明示的にアイコンを組み立てて各マーカーに渡す。
@@ -100,7 +104,7 @@ function createPrefectureClusters(stations: Station[]) {
       return {
         prefectureCode,
         prefectureName:
-          PREFECTURE_NAME_BY_CODE.get(prefectureCode) ??
+          PREFECTURE_NAME_BY_CODE[prefectureCode] ??
           `Prefecture ${prefectureCode}`,
         stations: prefectureStations,
         position: [latitude, longitude],
@@ -244,6 +248,47 @@ export function StationMap() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
+  const [selectedPrefectureCodes, setSelectedPrefectureCodes] = useState<
+    Set<number>
+  >(() => new Set(ALL_PREFECTURE_CODES))
+
+  const filteredStations = useMemo(
+    () =>
+      stations.filter((station) =>
+        selectedPrefectureCodes.has(station.prefectureCode),
+      ),
+    [selectedPrefectureCodes, stations],
+  )
+
+  const countsByPrefectureCode = useMemo(() => {
+    const counts = new Map<number, number>()
+
+    for (const station of stations) {
+      counts.set(
+        station.prefectureCode,
+        (counts.get(station.prefectureCode) ?? 0) + 1,
+      )
+    }
+
+    return counts
+  }, [stations])
+
+  const countsByRegionName = useMemo(() => {
+    const counts = new Map<(typeof REGIONS)[number]['name'], number>()
+
+    for (const region of REGIONS) {
+      counts.set(
+        region.name,
+        region.prefectureCodes.reduce(
+          (sum, prefectureCode) =>
+            sum + (countsByPrefectureCode.get(prefectureCode) ?? 0),
+          0,
+        ),
+      )
+    }
+
+    return counts
+  }, [countsByPrefectureCode])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -296,15 +341,24 @@ export function StationMap() {
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapZoomWatcher onZoomChange={setZoom} />
-        <StationMapMarkers stations={stations} zoom={zoom} />
+        <StationMapMarkers stations={filteredStations} zoom={zoom} />
       </MapContainer>
+
+      <div className="absolute left-3 top-20 z-[1000]">
+        <StationFilter
+          countsByPrefectureCode={countsByPrefectureCode}
+          countsByRegionName={countsByRegionName}
+          onChange={setSelectedPrefectureCodes}
+          selectedPrefectureCodes={selectedPrefectureCodes}
+        />
+      </div>
 
       <div className="pointer-events-none absolute bottom-3 left-3 z-[1000] rounded bg-white/90 px-2 py-1 text-xs font-medium text-slate-900 shadow">
         zoom: {zoom}
       </div>
 
       {(isLoading || errorMessage !== null) && (
-        <div className="pointer-events-none absolute left-3 top-3 z-[1000] rounded bg-white px-3 py-2 text-sm text-slate-900 shadow">
+        <div className="pointer-events-none absolute left-14 top-3 z-[1000] rounded bg-white px-3 py-2 text-sm text-slate-900 shadow">
           {errorMessage ?? '道の駅データを読み込み中...'}
         </div>
       )}
