@@ -52,6 +52,98 @@ export const PREFECTURE_CODE_BY_NAME = {
   沖縄県: 47,
 } as const
 
+export const PREFECTURE_NAME_BY_CODE = Object.fromEntries(
+  Object.entries(PREFECTURE_CODE_BY_NAME).map(([name, code]) => [code, name]),
+) as Readonly<Record<number, PrefectureName>>
+
+export const REGIONS = [
+  {
+    name: '北海道',
+    prefectureCodes: [PREFECTURE_CODE_BY_NAME.北海道],
+  },
+  {
+    name: '東北',
+    prefectureCodes: [
+      PREFECTURE_CODE_BY_NAME.青森県,
+      PREFECTURE_CODE_BY_NAME.岩手県,
+      PREFECTURE_CODE_BY_NAME.宮城県,
+      PREFECTURE_CODE_BY_NAME.秋田県,
+      PREFECTURE_CODE_BY_NAME.山形県,
+      PREFECTURE_CODE_BY_NAME.福島県,
+    ],
+  },
+  {
+    name: '関東',
+    prefectureCodes: [
+      PREFECTURE_CODE_BY_NAME.茨城県,
+      PREFECTURE_CODE_BY_NAME.栃木県,
+      PREFECTURE_CODE_BY_NAME.群馬県,
+      PREFECTURE_CODE_BY_NAME.埼玉県,
+      PREFECTURE_CODE_BY_NAME.千葉県,
+      PREFECTURE_CODE_BY_NAME.東京都,
+      PREFECTURE_CODE_BY_NAME.神奈川県,
+    ],
+  },
+  {
+    name: '中部',
+    prefectureCodes: [
+      PREFECTURE_CODE_BY_NAME.新潟県,
+      PREFECTURE_CODE_BY_NAME.富山県,
+      PREFECTURE_CODE_BY_NAME.石川県,
+      PREFECTURE_CODE_BY_NAME.福井県,
+      PREFECTURE_CODE_BY_NAME.山梨県,
+      PREFECTURE_CODE_BY_NAME.長野県,
+      PREFECTURE_CODE_BY_NAME.岐阜県,
+      PREFECTURE_CODE_BY_NAME.静岡県,
+      PREFECTURE_CODE_BY_NAME.愛知県,
+    ],
+  },
+  {
+    name: '近畿',
+    prefectureCodes: [
+      PREFECTURE_CODE_BY_NAME.三重県,
+      PREFECTURE_CODE_BY_NAME.滋賀県,
+      PREFECTURE_CODE_BY_NAME.京都府,
+      PREFECTURE_CODE_BY_NAME.大阪府,
+      PREFECTURE_CODE_BY_NAME.兵庫県,
+      PREFECTURE_CODE_BY_NAME.奈良県,
+      PREFECTURE_CODE_BY_NAME.和歌山県,
+    ],
+  },
+  {
+    name: '中国',
+    prefectureCodes: [
+      PREFECTURE_CODE_BY_NAME.鳥取県,
+      PREFECTURE_CODE_BY_NAME.島根県,
+      PREFECTURE_CODE_BY_NAME.岡山県,
+      PREFECTURE_CODE_BY_NAME.広島県,
+      PREFECTURE_CODE_BY_NAME.山口県,
+    ],
+  },
+  {
+    name: '四国',
+    prefectureCodes: [
+      PREFECTURE_CODE_BY_NAME.徳島県,
+      PREFECTURE_CODE_BY_NAME.香川県,
+      PREFECTURE_CODE_BY_NAME.愛媛県,
+      PREFECTURE_CODE_BY_NAME.高知県,
+    ],
+  },
+  {
+    name: '九州・沖縄',
+    prefectureCodes: [
+      PREFECTURE_CODE_BY_NAME.福岡県,
+      PREFECTURE_CODE_BY_NAME.佐賀県,
+      PREFECTURE_CODE_BY_NAME.長崎県,
+      PREFECTURE_CODE_BY_NAME.熊本県,
+      PREFECTURE_CODE_BY_NAME.大分県,
+      PREFECTURE_CODE_BY_NAME.宮崎県,
+      PREFECTURE_CODE_BY_NAME.鹿児島県,
+      PREFECTURE_CODE_BY_NAME.沖縄県,
+    ],
+  },
+] as const
+
 export const StationSchema = z.object({
   id: z.uuid(),
   sourceStationId: z.number().int().positive(),
@@ -65,4 +157,8 @@ export const StationSchema = z.object({
 
 export const StationsSchema = z.array(StationSchema)
 
+export type PrefectureName = keyof typeof PREFECTURE_CODE_BY_NAME
+export type PrefectureCode =
+  (typeof PREFECTURE_CODE_BY_NAME)[keyof typeof PREFECTURE_CODE_BY_NAME]
+export type Region = (typeof REGIONS)[number]
 export type Station = z.infer<typeof StationSchema>
