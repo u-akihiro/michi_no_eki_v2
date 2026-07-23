@@ -13,6 +13,9 @@ Thumbs.db
 # Codex tooling logs
 .codex-logs/
 
+# Codex agmsg local hooks
+.codex/
+
 # Dependencies
 node_modules/
 
