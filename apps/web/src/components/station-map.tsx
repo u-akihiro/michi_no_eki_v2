@@ -5,6 +5,7 @@ import {
   Marker,
   Popup,
   TileLayer,
+  Tooltip,
   useMap,
   useMapEvents,
 } from 'react-leaflet'
@@ -19,7 +20,11 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 const JAPAN_CENTER: [number, number] = [36.5, 138]
 const INITIAL_ZOOM = 5
 const PREFECTURE_CLUSTER_ZOOM_THRESHOLD = 10
+// 駅名ラベルはマーカーより一段深いズームから表示して重なりを抑える
+const STATION_LABEL_ZOOM_THRESHOLD = 11
 const CLUSTER_FIT_BOUNDS_PADDING = L.point(32, 32)
+// 表示範囲の外周に持たせる余白（パン直後の端の抜けを防ぐ）
+const VIEWPORT_PADDING_RATIO = 0.25
 
 type PrefectureCluster = {
   prefectureCode: number
@@ -32,10 +37,17 @@ const PREFECTURE_NAME_BY_CODE = new Map<number, string>(
   Object.entries(PREFECTURE_CODE_BY_NAME).map(([name, code]) => [code, name]),
 )
 
-L.Icon.Default.mergeOptions({
+// バンドラ環境ではデフォルトアイコンのURL自動解決が効かないため、
+// インポート済みの画像URLで明示的にアイコンを組み立てて各マーカーに渡す。
+const DEFAULT_MARKER_ICON = L.icon({
   iconRetinaUrl: markerIcon2x,
   iconUrl: markerIcon,
   shadowUrl: markerShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  tooltipAnchor: [16, -28],
+  shadowSize: [41, 41],
 })
 
 function createPrefectureClusterIcon(count: number) {
@@ -155,6 +167,18 @@ function StationMapMarkers({
   zoom: number
 }) {
   const map = useMap()
+  const [bounds, setBounds] = useState(() => map.getBounds())
+  const [isZooming, setIsZooming] = useState(false)
+
+  useMapEvents({
+    moveend: () => setBounds(map.getBounds()),
+    zoomstart: () => setIsZooming(true),
+    zoomend: () => {
+      setBounds(map.getBounds())
+      setIsZooming(false)
+    },
+  })
+
   const prefectureClusters = useMemo(
     () => createPrefectureClusters(stations),
     [stations],
@@ -180,13 +204,29 @@ function StationMapMarkers({
     )
   }
 
+  const paddedBounds = bounds.pad(VIEWPORT_PADDING_RATIO)
+  const visibleStations = stations.filter((station) =>
+    paddedBounds.contains([station.latitude, station.longitude]),
+  )
+
   return (
     <>
-      {stations.map((station) => (
+      {visibleStations.map((station) => (
         <Marker
+          icon={DEFAULT_MARKER_ICON}
           key={station.id}
           position={[station.latitude, station.longitude]}
         >
+          {zoom >= STATION_LABEL_ZOOM_THRESHOLD && !isZooming && (
+            <Tooltip
+              className="station-label"
+              direction="bottom"
+              offset={[-16, 28]}
+              permanent
+            >
+              {station.name}
+            </Tooltip>
+          )}
           <Popup>
             <div className="space-y-1">
               <p className="font-semibold">{station.name}</p>
@@ -248,6 +288,7 @@ export function StationMap() {
       <MapContainer
         center={JAPAN_CENTER}
         className="h-full w-full"
+        markerZoomAnimation={false}
         zoom={INITIAL_ZOOM}
       >
         <TileLayer
