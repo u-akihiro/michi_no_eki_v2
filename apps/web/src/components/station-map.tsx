@@ -271,17 +271,32 @@ function SearchPanWatcher({
 
     lastSubmittedQueryRef.current = normalizedSubmittedQuery
 
-    const station = stations.find((candidate) =>
+    const matchedStations = stations.filter((candidate) =>
       normalizeSearchText(candidate.name).includes(normalizedSubmittedQuery),
     )
 
-    if (station === undefined) {
+    if (matchedStations.length === 0) {
       return
     }
 
-    map.setView([station.latitude, station.longitude], SEARCH_ZOOM)
-    // programmatic な setView は zoomend が発火しないことがあり、クラスタ/個別ピンを
-    // 切り替える zoom state が更新されないため、ここで確定的に同期する。
+    if (matchedStations.length === 1) {
+      const station = matchedStations[0]!
+
+      map.setView([station.latitude, station.longitude], SEARCH_ZOOM)
+    } else {
+      // 複数該当時は 1 件だけにズームせず、全該当駅が収まる範囲に合わせる。
+      const bounds = L.latLngBounds(
+        matchedStations.map((station) => [station.latitude, station.longitude]),
+      )
+
+      map.fitBounds(bounds, {
+        maxZoom: SEARCH_ZOOM,
+        padding: CLUSTER_FIT_BOUNDS_PADDING,
+      })
+    }
+
+    // programmatic な setView / fitBounds は zoomend が発火しないことがあり、
+    // クラスタ/個別ピンを切り替える zoom state が更新されないため確定的に同期する。
     onZoomChange(map.getZoom())
   }, [map, onZoomChange, stations, submittedQuery])
 
