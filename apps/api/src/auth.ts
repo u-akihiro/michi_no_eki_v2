@@ -153,6 +153,7 @@ export const getCurrentUser = async (c: AppContext, db: Db) => {
       email: users.email,
       name: users.name,
       pictureUrl: users.pictureUrl,
+      createdAt: users.createdAt,
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
