@@ -1,84 +1,9 @@
-import { useEffect, useState } from 'react'
-
 import { Button } from './ui/button'
 
-type AuthUser = {
-  id: string
-  email: string
-  name: string
-  pictureUrl?: string | null
-}
-
-type AuthState =
-  | { status: 'loading' }
-  | { status: 'logged-out' }
-  | { status: 'logged-in'; user: AuthUser }
-
-type MeResponse = {
-  user: AuthUser
-}
+import { useAuth } from '@/contexts/auth-context'
 
 export function AuthControl() {
-  const [authState, setAuthState] = useState<AuthState>({ status: 'loading' })
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
-
-  useEffect(() => {
-    const controller = new AbortController()
-
-    async function loadCurrentUser() {
-      try {
-        const response = await fetch('/api/me', {
-          signal: controller.signal,
-        })
-
-        if (response.status === 401) {
-          setAuthState({ status: 'logged-out' })
-          return
-        }
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
-        }
-
-        const data = (await response.json()) as MeResponse
-        setAuthState({ status: 'logged-in', user: data.user })
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return
-        }
-
-        setAuthState({ status: 'logged-out' })
-      }
-    }
-
-    void loadCurrentUser()
-
-    return () => {
-      controller.abort()
-    }
-  }, [])
-
-  function handleLogin() {
-    window.location.href = '/auth/google/login'
-  }
-
-  async function handleLogout() {
-    setIsLoggingOut(true)
-
-    try {
-      const response = await fetch('/auth/logout', {
-        method: 'POST',
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      setAuthState({ status: 'logged-out' })
-    } finally {
-      setIsLoggingOut(false)
-    }
-  }
+  const { authState, isLoggingOut, login, logout } = useAuth()
 
   if (authState.status === 'loading') {
     return (
@@ -90,7 +15,7 @@ export function AuthControl() {
 
   if (authState.status === 'logged-out') {
     return (
-      <Button onClick={handleLogin} type="button">
+      <Button onClick={login} type="button">
         Google でログイン
       </Button>
     )
@@ -114,7 +39,7 @@ export function AuthControl() {
       </span>
       <Button
         disabled={isLoggingOut}
-        onClick={() => void handleLogout()}
+        onClick={() => void logout()}
         size="sm"
         type="button"
         variant="ghost"

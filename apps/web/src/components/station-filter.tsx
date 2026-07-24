@@ -3,18 +3,23 @@ import { useEffect, useRef, useState } from 'react'
 import { PREFECTURE_NAME_BY_CODE, REGIONS } from '@michi-no-eki/shared'
 import type { Region } from '@michi-no-eki/shared'
 
-import { Button } from './ui/button'
+import { cn } from '@/lib/utils'
+
+type VisitStatus = 'all' | 'visited' | 'unvisited'
 
 type StationFilterProps = {
   countsByPrefectureCode: ReadonlyMap<number, number>
   countsByRegionName: ReadonlyMap<Region['name'], number>
+  isVisitStatusDisabled: boolean
   onChange: (nextSelectedPrefectureCodes: Set<number>) => void
   selectedPrefectureCodes: ReadonlySet<number>
+  visiblePrefectureCount: number
+  visibleStationCount: number
 }
 
 type RegionSelectionState = 'all' | 'partial' | 'none'
 
-function getRegionSelectionState(
+export function getRegionSelectionState(
   region: Region,
   selectedPrefectureCodes: ReadonlySet<number>,
 ): RegionSelectionState {
@@ -33,14 +38,14 @@ function getRegionSelectionState(
   return 'partial'
 }
 
-function RegionCheckbox({
+function FilterCheckbox({
   checked,
-  indeterminate,
+  indeterminate = false,
   label,
   onChange,
 }: {
   checked: boolean
-  indeterminate: boolean
+  indeterminate?: boolean
   label: string
   onChange: () => void
 }) {
@@ -56,7 +61,7 @@ function RegionCheckbox({
     <input
       aria-label={label}
       checked={checked}
-      className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+      className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
       onChange={onChange}
       ref={ref}
       type="checkbox"
@@ -67,24 +72,18 @@ function RegionCheckbox({
 export function StationFilter({
   countsByPrefectureCode,
   countsByRegionName,
+  isVisitStatusDisabled,
   onChange,
   selectedPrefectureCodes,
+  visiblePrefectureCount,
+  visibleStationCount,
 }: StationFilterProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [visitStatus, setVisitStatus] = useState<VisitStatus>('all')
   const [expandedRegionNames, setExpandedRegionNames] = useState<
     ReadonlySet<Region['name']>
   >(() => new Set(REGIONS.map((region) => region.name)))
 
-  const allPrefectureCodes = REGIONS.flatMap((region) => region.prefectureCodes)
-  const selectedCount = allPrefectureCodes.filter((prefectureCode) =>
-    selectedPrefectureCodes.has(prefectureCode),
-  ).length
-
-  function handleSelectAll() {
-    onChange(new Set(allPrefectureCodes))
-  }
-
-  function handleClearAll() {
+  function clearSelection() {
     onChange(new Set())
   }
 
@@ -131,114 +130,152 @@ export function StationFilter({
   }
 
   return (
-    <div
-      className="w-72 max-w-[calc(100vw-1.5rem)] rounded-md bg-white/95 text-sm text-slate-900 shadow"
+    <aside
+      className="flex h-full min-h-0 w-full flex-col border-r border-border bg-white text-sm text-text"
       onDoubleClick={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
+      onTouchStart={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
     >
-      <Button
-        aria-expanded={isOpen}
-        className="h-9 w-full justify-between px-3"
-        onClick={() => setIsOpen((current) => !current)}
-        type="button"
-      >
-        <span>表示フィルタ</span>
-        <span className="text-xs font-normal text-slate-600">
-          {selectedCount}/47
-        </span>
-      </Button>
-
-      {isOpen && (
-        <div className="border-t border-slate-200 p-3">
-          <div className="mb-3 flex gap-2">
-            <Button
-              className="h-8 flex-1 px-2 text-xs"
-              onClick={handleSelectAll}
+      <div className="border-b border-border px-5 py-5">
+        <p className="mb-2 text-xs font-bold text-text-muted">訪問ステータス</p>
+        <div
+          aria-label="訪問ステータス"
+          className={cn(
+            'grid grid-cols-3 overflow-hidden rounded-lg border border-border bg-white',
+            isVisitStatusDisabled && 'opacity-55',
+          )}
+          role="group"
+        >
+          {[
+            ['all', 'すべて'],
+            ['visited', '訪問済み'],
+            ['unvisited', '未訪問'],
+          ].map(([value, label]) => (
+            <button
+              aria-pressed={visitStatus === value}
+              className={cn(
+                'h-9 border-r border-border px-2 text-xs font-bold last:border-r-0',
+                visitStatus === value
+                  ? 'bg-primary text-white'
+                  : 'bg-white text-text hover:bg-background',
+              )}
+              disabled={isVisitStatusDisabled}
+              key={value}
+              onClick={() => setVisitStatus(value as VisitStatus)}
               type="button"
             >
-              全選択
-            </Button>
-            <Button
-              className="h-8 flex-1 px-2 text-xs"
-              onClick={handleClearAll}
-              type="button"
-            >
-              全解除
-            </Button>
-          </div>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-          <div className="max-h-[min(28rem,calc(100vh-9rem))] space-y-2 overflow-y-auto pr-1">
-            {REGIONS.map((region) => {
-              const selectionState = getRegionSelectionState(
-                region,
-                selectedPrefectureCodes,
-              )
-              const isExpanded = expandedRegionNames.has(region.name)
-              const regionCount = countsByRegionName.get(region.name) ?? 0
+      <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-black text-text">
+            エリア(地方・都道府県)
+          </h2>
+          <button
+            className="text-xs font-bold text-primary hover:text-primary-hover"
+            onClick={clearSelection}
+            type="button"
+          >
+            クリア
+          </button>
+        </div>
 
-              return (
-                <section key={region.name}>
-                  <div className="flex items-center gap-2">
-                    <RegionCheckbox
-                      checked={selectionState === 'all'}
-                      indeterminate={selectionState === 'partial'}
-                      label={`${region.name}を切り替え`}
-                      onChange={() => toggleRegion(region)}
-                    />
-                    <button
-                      aria-expanded={isExpanded}
-                      className="flex min-w-0 flex-1 items-center justify-between rounded px-1 py-1 text-left hover:bg-slate-100"
-                      onClick={() => toggleRegionExpansion(region.name)}
-                      type="button"
-                    >
-                      <span className="truncate font-medium">
-                        {region.name} ({regionCount})
-                      </span>
-                      <span
-                        aria-hidden="true"
-                        className="ml-2 text-xs text-slate-500"
-                      >
-                        {isExpanded ? '▲' : '▼'}
-                      </span>
-                    </button>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+          {REGIONS.map((region) => {
+            const selectionState = getRegionSelectionState(
+              region,
+              selectedPrefectureCodes,
+            )
+            const isExpanded = expandedRegionNames.has(region.name)
+            const regionCount = countsByRegionName.get(region.name) ?? 0
+
+            return (
+              <section key={region.name}>
+                <div className="flex items-center gap-2 rounded-md py-1">
+                  <button
+                    aria-expanded={isExpanded}
+                    aria-label={`${region.name}を${isExpanded ? '閉じる' : '開く'}`}
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded text-[10px] text-text-muted hover:bg-background"
+                    onClick={() => toggleRegionExpansion(region.name)}
+                    type="button"
+                  >
+                    {isExpanded ? '⌄' : '›'}
+                  </button>
+                  <FilterCheckbox
+                    checked={selectionState === 'all'}
+                    indeterminate={selectionState === 'partial'}
+                    label={`${region.name}を選択`}
+                    onChange={() => toggleRegion(region)}
+                  />
+                  <span className="min-w-0 flex-1 truncate font-bold">
+                    {region.name}
+                  </span>
+                  <span className="text-xs font-medium text-text-muted">
+                    {regionCount}
+                  </span>
+                </div>
+
+                {isExpanded && (
+                  <div className="mt-1 space-y-1 pl-10">
+                    {region.prefectureCodes.map((prefectureCode) => {
+                      const prefectureName =
+                        PREFECTURE_NAME_BY_CODE[prefectureCode]
+                      const prefectureCount =
+                        countsByPrefectureCode.get(prefectureCode) ?? 0
+
+                      return (
+                        <label
+                          className="flex items-center gap-2 rounded-md px-1 py-1 text-sm hover:bg-background"
+                          key={prefectureCode}
+                        >
+                          <FilterCheckbox
+                            checked={selectedPrefectureCodes.has(
+                              prefectureCode,
+                            )}
+                            label={`${prefectureName}を選択`}
+                            onChange={() => togglePrefecture(prefectureCode)}
+                          />
+                          <span className="min-w-0 flex-1 truncate">
+                            {prefectureName}
+                          </span>
+                          <span className="text-xs font-medium text-text-muted">
+                            {prefectureCount}
+                          </span>
+                        </label>
+                      )
+                    })}
                   </div>
+                )}
+              </section>
+            )
+          })}
+        </div>
 
-                  {isExpanded && (
-                    <div className="mt-1 space-y-1 pl-6">
-                      {region.prefectureCodes.map((prefectureCode) => {
-                        const prefectureName =
-                          PREFECTURE_NAME_BY_CODE[prefectureCode]
-                        const prefectureCount =
-                          countsByPrefectureCode.get(prefectureCode) ?? 0
+        <p className="mt-3 text-xs font-medium text-text-subtle">
+          未選択の場合は全国を表示します
+        </p>
+      </div>
 
-                        return (
-                          <label
-                            className="flex items-center gap-2 rounded px-1 py-1 hover:bg-slate-100"
-                            key={prefectureCode}
-                          >
-                            <input
-                              checked={selectedPrefectureCodes.has(
-                                prefectureCode,
-                              )}
-                              className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
-                              onChange={() => togglePrefecture(prefectureCode)}
-                              type="checkbox"
-                            />
-                            <span className="min-w-0 truncate">
-                              {prefectureName} ({prefectureCount})
-                            </span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  )}
-                </section>
-              )
-            })}
+      <div className="m-5 mt-0 rounded-lg bg-background p-4">
+        <p className="mb-3 text-sm font-black">
+          表示中: {visiblePrefectureCount}都県 {visibleStationCount}駅
+        </p>
+        <div className="space-y-2 text-xs font-medium text-text-muted">
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+            <span>訪問済み -</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full border border-slate-400 bg-white" />
+            <span>未訪問 {visibleStationCount}</span>
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    </aside>
   )
 }

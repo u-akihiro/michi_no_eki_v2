@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 
 import { AuthControl } from '../auth-control'
 
+import { useStationSearch } from '@/contexts/station-search-context'
 import { cn } from '@/lib/utils'
 
 const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
@@ -11,6 +12,8 @@ const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
   )
 
 export function Header() {
+  const { query, setQuery, submitSearch } = useStationSearch()
+
   return (
     <header
       aria-label="アプリヘッダー"
@@ -39,9 +42,15 @@ export function Header() {
         <input
           aria-label="道の駅を検索"
           className="h-10 w-full max-w-[454px] rounded-full border border-border bg-slate-50 pl-11 pr-4 text-sm font-medium text-text outline-none transition-colors placeholder:text-text-subtle focus:border-primary"
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              submitSearch(event.currentTarget.value)
+            }
+          }}
           placeholder="道の駅を検索"
-          readOnly
           type="search"
+          value={query}
         />
       </div>
 

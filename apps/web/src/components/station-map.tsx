@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import {
   MapContainer,
@@ -11,27 +11,23 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 
-import {
-  PREFECTURE_CODE_BY_NAME,
-  PREFECTURE_NAME_BY_CODE,
-  REGIONS,
-} from '@michi-no-eki/shared'
+import { PREFECTURE_NAME_BY_CODE, REGIONS } from '@michi-no-eki/shared'
 import type { Station } from '@michi-no-eki/shared'
 
 import { StationFilter } from './station-filter'
+import { Button } from './ui/button'
 
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
-import markerIcon from 'leaflet/dist/images/marker-icon.png'
-import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+import { useAuth } from '@/contexts/auth-context'
+import { useStationSearch } from '@/contexts/station-search-context'
 
 const JAPAN_CENTER: [number, number] = [36.5, 138]
 const INITIAL_ZOOM = 5
+const SEARCH_ZOOM = 12
 const PREFECTURE_CLUSTER_ZOOM_THRESHOLD = 10
-// 駅名ラベルはマーカーより一段深いズームから表示して重なりを抑える
 const STATION_LABEL_ZOOM_THRESHOLD = 11
 const CLUSTER_FIT_BOUNDS_PADDING = L.point(32, 32)
-// 表示範囲の外周に持たせる余白（パン直後の端の抜けを防ぐ）
 const VIEWPORT_PADDING_RATIO = 0.25
+const GEOLOCATION_TIMEOUT_MS = 6000
 
 type PrefectureCluster = {
   prefectureCode: number
@@ -40,27 +36,55 @@ type PrefectureCluster = {
   position: [number, number]
 }
 
-const ALL_PREFECTURE_CODES = Object.values(PREFECTURE_CODE_BY_NAME)
+type NearestStation = {
+  distanceKm: number
+  station: Station
+}
 
-// バンドラ環境ではデフォルトアイコンのURL自動解決が効かないため、
-// インポート済みの画像URLで明示的にアイコンを組み立てて各マーカーに渡す。
-const DEFAULT_MARKER_ICON = L.icon({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  tooltipAnchor: [16, -28],
-  shadowSize: [41, 41],
+const UNVISITED_STATION_ICON = L.divIcon({
+  className: '',
+  html: `<div style="
+    height: 24px;
+    position: relative;
+    width: 22px;
+  ">
+    <div style="
+      background: #ffffff;
+      border: 2px solid #94a3b8;
+      border-radius: 9999px;
+      box-shadow: 0 2px 6px oklch(0.3 0.03 250 / 0.3);
+      height: 14px;
+      left: 4px;
+      position: absolute;
+      top: 1px;
+      width: 14px;
+    "></div>
+    <div style="
+      background: #334155;
+      border-radius: 9999px;
+      height: 8px;
+      left: 10px;
+      position: absolute;
+      top: 14px;
+      width: 2px;
+    "></div>
+  </div>`,
+  iconAnchor: [11, 22],
+  iconSize: [22, 24],
+  popupAnchor: [0, -22],
+  tooltipAnchor: [0, 4],
 })
+
+function normalizeSearchText(value: string) {
+  return value.trim().toLocaleLowerCase('ja-JP')
+}
 
 function createPrefectureClusterIcon(count: number) {
   return L.divIcon({
     className: '',
     html: `<div style="
       align-items: center;
-      background: #0f766e;
+      background: var(--color-primary);
       border: 3px solid #ffffff;
       border-radius: 9999px;
       box-shadow: 0 10px 20px rgba(15, 23, 42, 0.25);
@@ -148,6 +172,49 @@ function fitPrefectureStations(map: L.Map, stations: Station[]) {
   })
 }
 
+function calculateDistanceKm(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number },
+) {
+  const earthRadiusKm = 6371
+  const fromLatitude = (from.latitude * Math.PI) / 180
+  const toLatitude = (to.latitude * Math.PI) / 180
+  const latitudeDelta = ((to.latitude - from.latitude) * Math.PI) / 180
+  const longitudeDelta = ((to.longitude - from.longitude) * Math.PI) / 180
+  const haversine =
+    Math.sin(latitudeDelta / 2) * Math.sin(latitudeDelta / 2) +
+    Math.cos(fromLatitude) *
+      Math.cos(toLatitude) *
+      Math.sin(longitudeDelta / 2) *
+      Math.sin(longitudeDelta / 2)
+
+  return (
+    earthRadiusKm *
+    2 *
+    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+  )
+}
+
+function findNearestStation(
+  stations: Station[],
+  position: { latitude: number; longitude: number },
+): NearestStation | null {
+  let nearestStation: NearestStation | null = null
+
+  for (const station of stations) {
+    const distanceKm = calculateDistanceKm(position, {
+      latitude: station.latitude,
+      longitude: station.longitude,
+    })
+
+    if (nearestStation === null || distanceKm < nearestStation.distanceKm) {
+      nearestStation = { distanceKm, station }
+    }
+  }
+
+  return nearestStation
+}
+
 function MapZoomWatcher({
   onZoomChange,
 }: {
@@ -160,6 +227,63 @@ function MapZoomWatcher({
       onZoomChange(map.getZoom())
     },
   })
+
+  return null
+}
+
+function MapResizeWatcher({ token }: { token: string }) {
+  const map = useMap()
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      map.invalidateSize()
+    }, 180)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [map, token])
+
+  return null
+}
+
+function SearchPanWatcher({
+  onZoomChange,
+  stations,
+  submittedQuery,
+}: {
+  onZoomChange: (zoom: number) => void
+  stations: Station[]
+  submittedQuery: string
+}) {
+  const map = useMap()
+  const lastSubmittedQueryRef = useRef('')
+
+  useEffect(() => {
+    const normalizedSubmittedQuery = normalizeSearchText(submittedQuery)
+
+    if (
+      normalizedSubmittedQuery.length === 0 ||
+      normalizedSubmittedQuery === lastSubmittedQueryRef.current
+    ) {
+      return
+    }
+
+    lastSubmittedQueryRef.current = normalizedSubmittedQuery
+
+    const station = stations.find((candidate) =>
+      normalizeSearchText(candidate.name).includes(normalizedSubmittedQuery),
+    )
+
+    if (station === undefined) {
+      return
+    }
+
+    map.setView([station.latitude, station.longitude], SEARCH_ZOOM)
+    // programmatic な setView は zoomend が発火しないことがあり、クラスタ/個別ピンを
+    // 切り替える zoom state が更新されないため、ここで確定的に同期する。
+    onZoomChange(map.getZoom())
+  }, [map, onZoomChange, stations, submittedQuery])
 
   return null
 }
@@ -189,6 +313,21 @@ function StationMapMarkers({
     [stations],
   )
 
+  const clusterIconByCount = useMemo(() => {
+    const icons = new Map<number, L.DivIcon>()
+
+    for (const cluster of prefectureClusters) {
+      if (!icons.has(cluster.stations.length)) {
+        icons.set(
+          cluster.stations.length,
+          createPrefectureClusterIcon(cluster.stations.length),
+        )
+      }
+    }
+
+    return icons
+  }, [prefectureClusters])
+
   if (zoom < PREFECTURE_CLUSTER_ZOOM_THRESHOLD) {
     return (
       <>
@@ -199,7 +338,10 @@ function StationMapMarkers({
                 fitPrefectureStations(map, cluster.stations)
               },
             }}
-            icon={createPrefectureClusterIcon(cluster.stations.length)}
+            icon={
+              clusterIconByCount.get(cluster.stations.length) ??
+              createPrefectureClusterIcon(cluster.stations.length)
+            }
             key={cluster.prefectureCode}
             position={cluster.position}
             title={`${cluster.prefectureName}: ${cluster.stations.length}`}
@@ -218,7 +360,7 @@ function StationMapMarkers({
     <>
       {visibleStations.map((station) => (
         <Marker
-          icon={DEFAULT_MARKER_ICON}
+          icon={UNVISITED_STATION_ICON}
           key={station.id}
           position={[station.latitude, station.longitude]}
         >
@@ -226,7 +368,7 @@ function StationMapMarkers({
             <Tooltip
               className="station-label"
               direction="bottom"
-              offset={[-16, 28]}
+              offset={[0, 8]}
               permanent
             >
               {station.name}
@@ -244,22 +386,73 @@ function StationMapMarkers({
   )
 }
 
+function NearbyStationCard({
+  nearestStation,
+}: {
+  nearestStation: NearestStation
+}) {
+  return (
+    <div className="pointer-events-auto absolute bottom-4 left-4 z-[1000] w-[min(320px,calc(100vw-2rem))] rounded-xl bg-white p-4 shadow-[0_4px_24px_oklch(0.3_0.03_250_/_0.12)]">
+      <p className="mb-3 text-xs font-black text-text-muted">
+        現在地から近い道の駅
+      </p>
+      <div className="flex items-center gap-3">
+        <div className="h-14 w-14 shrink-0 rounded-lg bg-[repeating-linear-gradient(45deg,oklch(0.88_0.045_250)_0_6px,oklch(0.94_0.02_250)_6px_12px)]" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-black text-text">
+            {nearestStation.station.name}
+          </p>
+          <p className="mt-1 truncate text-xs font-medium text-text-muted">
+            {nearestStation.station.address}
+          </p>
+          <p className="mt-1 text-xs font-medium text-text-muted">
+            約{nearestStation.distanceKm.toFixed(1)}km
+          </p>
+        </div>
+        <Button disabled size="sm" type="button">
+          チェックイン
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export function StationMap() {
+  const { authState } = useAuth()
+  const { query, submittedQuery } = useStationSearch()
   const [stations, setStations] = useState<Station[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
   const [selectedPrefectureCodes, setSelectedPrefectureCodes] = useState<
     Set<number>
-  >(() => new Set(ALL_PREFECTURE_CODES))
-
-  const filteredStations = useMemo(
-    () =>
-      stations.filter((station) =>
-        selectedPrefectureCodes.has(station.prefectureCode),
-      ),
-    [selectedPrefectureCodes, stations],
+  >(() => new Set())
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
+  const [nearestStation, setNearestStation] = useState<NearestStation | null>(
+    null,
   )
+
+  const normalizedQuery = normalizeSearchText(query)
+
+  const areaFilteredStations = useMemo(() => {
+    if (selectedPrefectureCodes.size === 0) {
+      return stations
+    }
+
+    return stations.filter((station) =>
+      selectedPrefectureCodes.has(station.prefectureCode),
+    )
+  }, [selectedPrefectureCodes, stations])
+
+  const filteredStations = useMemo(() => {
+    if (normalizedQuery.length === 0) {
+      return areaFilteredStations
+    }
+
+    return areaFilteredStations.filter((station) =>
+      normalizeSearchText(station.name).includes(normalizedQuery),
+    )
+  }, [areaFilteredStations, normalizedQuery])
 
   const countsByPrefectureCode = useMemo(() => {
     const counts = new Map<number, number>()
@@ -290,6 +483,12 @@ export function StationMap() {
 
     return counts
   }, [countsByPrefectureCode])
+
+  const visiblePrefectureCount = useMemo(
+    () =>
+      new Set(filteredStations.map((station) => station.prefectureCode)).size,
+    [filteredStations],
+  )
 
   useEffect(() => {
     const controller = new AbortController()
@@ -329,42 +528,106 @@ export function StationMap() {
     }
   }, [])
 
+  useEffect(() => {
+    if (stations.length === 0 || !('geolocation' in navigator)) {
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setNearestStation(
+          findNearestStation(stations, {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          }),
+        )
+      },
+      () => {
+        setNearestStation(null)
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 300000,
+        timeout: GEOLOCATION_TIMEOUT_MS,
+      },
+    )
+  }, [stations])
+
+  const filterPanel = (
+    <StationFilter
+      countsByPrefectureCode={countsByPrefectureCode}
+      countsByRegionName={countsByRegionName}
+      isVisitStatusDisabled={authState.status !== 'logged-in'}
+      onChange={setSelectedPrefectureCodes}
+      selectedPrefectureCodes={selectedPrefectureCodes}
+      visiblePrefectureCount={visiblePrefectureCount}
+      visibleStationCount={filteredStations.length}
+    />
+  )
+
   return (
-    <div className="relative h-full w-full">
-      <MapContainer
-        center={JAPAN_CENTER}
-        className="h-full w-full"
-        markerZoomAnimation={false}
-        zoom={INITIAL_ZOOM}
-        zoomControl={false}
-      >
-        <ZoomControl position="bottomright" />
-        <TileLayer
-          attribution="&copy; OpenStreetMap contributors"
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <MapZoomWatcher onZoomChange={setZoom} />
-        <StationMapMarkers stations={filteredStations} zoom={zoom} />
-      </MapContainer>
-
-      <div className="absolute left-3 top-3 z-[1000]">
-        <StationFilter
-          countsByPrefectureCode={countsByPrefectureCode}
-          countsByRegionName={countsByRegionName}
-          onChange={setSelectedPrefectureCodes}
-          selectedPrefectureCodes={selectedPrefectureCodes}
-        />
+    <div className="flex h-full min-h-0 w-full bg-background">
+      <div className="hidden h-full min-h-0 w-[280px] shrink-0 md:block">
+        {filterPanel}
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 left-3 z-[1000] rounded bg-white/90 px-2 py-1 text-xs font-medium text-slate-900 shadow">
-        zoom: {zoom}
-      </div>
+      <div className="relative min-h-0 min-w-0 flex-1">
+        <MapContainer
+          center={JAPAN_CENTER}
+          className="h-full w-full"
+          markerZoomAnimation={false}
+          zoom={INITIAL_ZOOM}
+          zoomControl={false}
+        >
+          <ZoomControl position="bottomright" />
+          <TileLayer
+            attribution="&copy; OpenStreetMap contributors"
+            url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          <MapResizeWatcher
+            token={`${isMobileFilterOpen}-${selectedPrefectureCodes.size}`}
+          />
+          <SearchPanWatcher
+            onZoomChange={setZoom}
+            stations={filteredStations}
+            submittedQuery={submittedQuery}
+          />
+          <MapZoomWatcher onZoomChange={setZoom} />
+          <StationMapMarkers stations={filteredStations} zoom={zoom} />
+        </MapContainer>
 
-      {(isLoading || errorMessage !== null) && (
-        <div className="pointer-events-none absolute left-14 top-3 z-[1000] rounded bg-white px-3 py-2 text-sm text-slate-900 shadow">
-          {errorMessage ?? '道の駅データを読み込み中...'}
-        </div>
-      )}
+        <Button
+          className="absolute left-3 top-3 z-[1000] md:hidden"
+          onClick={() => setIsMobileFilterOpen(true)}
+          type="button"
+        >
+          フィルタ
+        </Button>
+
+        {isMobileFilterOpen && (
+          <div className="absolute inset-0 z-[1200] md:hidden">
+            <button
+              aria-label="フィルタを閉じる"
+              className="absolute inset-0 bg-slate-950/25"
+              onClick={() => setIsMobileFilterOpen(false)}
+              type="button"
+            />
+            <div className="absolute inset-y-0 left-0 w-[min(320px,88vw)] shadow-[0_12px_48px_oklch(0.2_0.04_250_/_0.4)]">
+              {filterPanel}
+            </div>
+          </div>
+        )}
+
+        {nearestStation !== null && (
+          <NearbyStationCard nearestStation={nearestStation} />
+        )}
+
+        {(isLoading || errorMessage !== null) && (
+          <div className="pointer-events-none absolute left-3 top-16 z-[1000] rounded bg-white px-3 py-2 text-sm text-text shadow md:top-3">
+            {errorMessage ?? '道の駅データを読み込み中...'}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
