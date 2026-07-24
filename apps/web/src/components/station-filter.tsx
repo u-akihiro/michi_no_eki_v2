@@ -184,18 +184,20 @@ export function StationFilter({
           </button>
         </div>
 
-        {selectedPrefectureCodes.size === 0 ? (
-          <div className="mb-3 rounded-md bg-primary/10 px-3 py-2 text-xs font-bold text-primary">
-            全国を表示中
-            <span className="ml-1.5 font-medium text-text-muted">
-              地方・都道府県を選ぶと絞り込めます
-            </span>
-          </div>
-        ) : (
-          <div className="mb-3 text-xs font-medium text-text-muted">
-            選択した地域に絞り込み中
-          </div>
-        )}
+        {/* 未選択/選択で高さが変わると下のリストがズレるため、両状態を
+            同じ体裁・同じ行数(太字1行+補助1行)のボックスに揃える。 */}
+        <div className="mb-3 rounded-md bg-primary/10 px-3 py-2 text-xs">
+          <p className="font-bold text-primary">
+            {selectedPrefectureCodes.size === 0
+              ? '全国を表示中'
+              : '選択した地域に絞り込み中'}
+          </p>
+          <p className="mt-0.5 font-medium text-text-muted">
+            {selectedPrefectureCodes.size === 0
+              ? '地方・都道府県を選ぶと絞り込めます'
+              : '「クリア」で全国表示に戻せます'}
+          </p>
+        </div>
 
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
           {REGIONS.map((region) => {
