@@ -338,7 +338,7 @@ export function StationMap() {
         zoom={INITIAL_ZOOM}
         zoomControl={false}
       >
-        <ZoomControl position="topright" />
+        <ZoomControl position="bottomright" />
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
