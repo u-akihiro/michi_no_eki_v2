@@ -6,6 +6,7 @@ import {
   Popup,
   TileLayer,
   Tooltip,
+  ZoomControl,
   useMap,
   useMapEvents,
 } from 'react-leaflet'
@@ -335,7 +336,9 @@ export function StationMap() {
         className="h-full w-full"
         markerZoomAnimation={false}
         zoom={INITIAL_ZOOM}
+        zoomControl={false}
       >
+        <ZoomControl position="topright" />
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
