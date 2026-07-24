@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import {
   MapContainer,
   Marker,
-  Popup,
   TileLayer,
   Tooltip,
   ZoomControl,
@@ -12,9 +11,11 @@ import {
 } from 'react-leaflet'
 
 import { PREFECTURE_NAME_BY_CODE, REGIONS } from '@michi-no-eki/shared'
-import type { Station } from '@michi-no-eki/shared'
+import type { Checkin, Station, VisitSummary } from '@michi-no-eki/shared'
 
+import { StationDetailPanel } from './station-detail-panel'
 import { StationFilter } from './station-filter'
+import type { VisitStatus } from './station-filter'
 import { Button } from './ui/button'
 
 import { useAuth } from '@/contexts/auth-context'
@@ -41,38 +42,84 @@ type NearestStation = {
   station: Station
 }
 
-const UNVISITED_STATION_ICON = L.divIcon({
-  className: '',
-  html: `<div style="
-    height: 24px;
-    position: relative;
-    width: 22px;
-  ">
-    <div style="
-      background: #ffffff;
-      border: 2px solid #94a3b8;
+function createStationIcon({
+  isSelected,
+  isVisited,
+}: {
+  isSelected: boolean
+  isVisited: boolean
+}) {
+  const dotSize = isSelected ? 20 : isVisited ? 16 : 14
+  const containerWidth = isSelected ? 30 : 22
+  const containerHeight = isSelected ? 32 : 24
+  const dotLeft = (containerWidth - dotSize) / 2
+  const dotTop = isSelected ? 1 : 1
+  const stemTop = dotTop + dotSize - 1
+  const background = isVisited ? 'var(--color-primary)' : '#ffffff'
+  const border = isVisited ? '#ffffff' : '#94a3b8'
+  const ring = isSelected
+    ? `<div style="
+      border: 3px solid oklch(0.74 0.12 250 / 0.72);
       border-radius: 9999px;
-      box-shadow: 0 2px 6px oklch(0.3 0.03 250 / 0.3);
-      height: 14px;
-      left: 4px;
+      height: ${dotSize + 10}px;
+      left: ${dotLeft - 5}px;
       position: absolute;
-      top: 1px;
-      width: 14px;
-    "></div>
-    <div style="
-      background: #334155;
-      border-radius: 9999px;
-      height: 8px;
-      left: 10px;
-      position: absolute;
-      top: 14px;
-      width: 2px;
-    "></div>
-  </div>`,
-  iconAnchor: [11, 22],
-  iconSize: [22, 24],
-  popupAnchor: [0, -22],
-  tooltipAnchor: [0, 4],
+      top: ${dotTop - 5}px;
+      width: ${dotSize + 10}px;
+    "></div>`
+    : ''
+
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      height: ${containerHeight}px;
+      position: relative;
+      width: ${containerWidth}px;
+    ">
+      ${ring}
+      <div style="
+        background: ${background};
+        border: 2px solid ${border};
+        border-radius: 9999px;
+        box-shadow: 0 2px 8px oklch(0.3 0.03 250 / 0.34);
+        height: ${dotSize}px;
+        left: ${dotLeft}px;
+        position: absolute;
+        top: ${dotTop}px;
+        width: ${dotSize}px;
+      "></div>
+      <div style="
+        background: #334155;
+        border-radius: 9999px;
+        height: 8px;
+        left: ${(containerWidth - 2) / 2}px;
+        position: absolute;
+        top: ${stemTop}px;
+        width: 2px;
+      "></div>
+    </div>`,
+    iconAnchor: [containerWidth / 2, containerHeight - 2],
+    iconSize: [containerWidth, containerHeight],
+    popupAnchor: [0, -(containerHeight - 2)],
+    tooltipAnchor: [0, 4],
+  })
+}
+
+const UNVISITED_STATION_ICON = createStationIcon({
+  isSelected: false,
+  isVisited: false,
+})
+const VISITED_STATION_ICON = createStationIcon({
+  isSelected: false,
+  isVisited: true,
+})
+const SELECTED_UNVISITED_STATION_ICON = createStationIcon({
+  isSelected: true,
+  isVisited: false,
+})
+const SELECTED_VISITED_STATION_ICON = createStationIcon({
+  isSelected: true,
+  isVisited: true,
 })
 
 function normalizeSearchText(value: string) {
@@ -304,10 +351,16 @@ function SearchPanWatcher({
 }
 
 function StationMapMarkers({
+  onStationSelect,
+  selectedStationId,
   stations,
+  visitsByStationId,
   zoom,
 }: {
+  onStationSelect: (station: Station) => void
+  selectedStationId: string | null
   stations: Station[]
+  visitsByStationId: ReadonlyMap<string, VisitSummary>
   zoom: number
 }) {
   const map = useMap()
@@ -373,38 +426,56 @@ function StationMapMarkers({
 
   return (
     <>
-      {visibleStations.map((station) => (
-        <Marker
-          icon={UNVISITED_STATION_ICON}
-          key={station.id}
-          position={[station.latitude, station.longitude]}
-        >
-          {zoom >= STATION_LABEL_ZOOM_THRESHOLD && !isZooming && (
-            <Tooltip
-              className="station-label"
-              direction="bottom"
-              offset={[0, 8]}
-              permanent
-            >
-              {station.name}
-            </Tooltip>
-          )}
-          <Popup>
-            <div className="space-y-1">
-              <p className="font-semibold">{station.name}</p>
-              <p className="text-sm text-slate-600">{station.address}</p>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+      {visibleStations.map((station) => {
+        const isVisited = visitsByStationId.has(station.id)
+        const isSelected = station.id === selectedStationId
+        const icon = isSelected
+          ? isVisited
+            ? SELECTED_VISITED_STATION_ICON
+            : SELECTED_UNVISITED_STATION_ICON
+          : isVisited
+            ? VISITED_STATION_ICON
+            : UNVISITED_STATION_ICON
+
+        return (
+          <Marker
+            eventHandlers={{
+              click: () => onStationSelect(station),
+            }}
+            icon={icon}
+            key={station.id}
+            position={[station.latitude, station.longitude]}
+            zIndexOffset={isSelected ? 1000 : 0}
+          >
+            {zoom >= STATION_LABEL_ZOOM_THRESHOLD && !isZooming && (
+              <Tooltip
+                className="station-label"
+                direction="bottom"
+                offset={[0, 8]}
+                permanent
+              >
+                {station.name}
+              </Tooltip>
+            )}
+          </Marker>
+        )
+      })}
     </>
   )
 }
 
 function NearbyStationCard({
+  isCheckinPending,
+  isLoggedIn,
   nearestStation,
+  onCheckin,
+  onSelect,
 }: {
+  isCheckinPending: boolean
+  isLoggedIn: boolean
   nearestStation: NearestStation
+  onCheckin: (station: Station) => void
+  onSelect: (station: Station) => void
 }) {
   return (
     <div className="pointer-events-auto absolute bottom-4 left-4 z-[1000] w-[min(320px,calc(100vw-2rem))] rounded-xl bg-white p-4 shadow-[0_4px_24px_oklch(0.3_0.03_250_/_0.12)]">
@@ -414,9 +485,13 @@ function NearbyStationCard({
       <div className="flex items-center gap-3">
         <div className="h-14 w-14 shrink-0 rounded-lg bg-[repeating-linear-gradient(45deg,oklch(0.88_0.045_250)_0_6px,oklch(0.94_0.02_250)_6px_12px)]" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-black text-text">
+          <button
+            className="block max-w-full truncate text-left text-sm font-black text-text hover:text-primary"
+            onClick={() => onSelect(nearestStation.station)}
+            type="button"
+          >
             {nearestStation.station.name}
-          </p>
+          </button>
           <p className="mt-1 truncate text-xs font-medium text-text-muted">
             {nearestStation.station.address}
           </p>
@@ -424,8 +499,20 @@ function NearbyStationCard({
             約{nearestStation.distanceKm.toFixed(1)}km
           </p>
         </div>
-        <Button disabled size="sm" type="button">
-          チェックイン
+        <Button
+          disabled={isLoggedIn && isCheckinPending}
+          onClick={() => {
+            if (isLoggedIn) {
+              onCheckin(nearestStation.station)
+              return
+            }
+
+            window.location.href = '/auth/google/login'
+          }}
+          size="sm"
+          type="button"
+        >
+          {isLoggedIn && isCheckinPending ? '処理中' : 'チェックイン'}
         </Button>
       </div>
     </div>
@@ -436,6 +523,20 @@ export function StationMap() {
   const { authState } = useAuth()
   const { query, submittedQuery } = useStationSearch()
   const [stations, setStations] = useState<Station[]>([])
+  const [visitsByStationId, setVisitsByStationId] = useState<
+    Map<string, VisitSummary>
+  >(() => new Map())
+  const [visitStatus, setVisitStatus] = useState<VisitStatus>('all')
+  const [selectedStationId, setSelectedStationId] = useState<string | null>(
+    null,
+  )
+  const [selectedStationCheckins, setSelectedStationCheckins] = useState<
+    Checkin[]
+  >([])
+  const [isCheckinsLoading, setIsCheckinsLoading] = useState(false)
+  const [checkinPendingStationIds, setCheckinPendingStationIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set())
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
@@ -448,6 +549,17 @@ export function StationMap() {
   )
 
   const normalizedQuery = normalizeSearchText(query)
+  const authUserId = authState.status === 'logged-in' ? authState.user.id : null
+  const isLoggedIn = authUserId !== null
+
+  const selectedStation = useMemo(
+    () =>
+      selectedStationId === null
+        ? null
+        : (stations.find((station) => station.id === selectedStationId) ??
+          null),
+    [selectedStationId, stations],
+  )
 
   const areaFilteredStations = useMemo(() => {
     if (selectedPrefectureCodes.size === 0) {
@@ -459,7 +571,7 @@ export function StationMap() {
     )
   }, [selectedPrefectureCodes, stations])
 
-  const filteredStations = useMemo(() => {
+  const areaAndSearchFilteredStations = useMemo(() => {
     if (normalizedQuery.length === 0) {
       return areaFilteredStations
     }
@@ -468,6 +580,31 @@ export function StationMap() {
       normalizeSearchText(station.name).includes(normalizedQuery),
     )
   }, [areaFilteredStations, normalizedQuery])
+
+  const filteredStations = useMemo(() => {
+    if (!isLoggedIn || visitStatus === 'all') {
+      return areaAndSearchFilteredStations
+    }
+
+    return areaAndSearchFilteredStations.filter((station) => {
+      const isVisited = visitsByStationId.has(station.id)
+
+      return visitStatus === 'visited' ? isVisited : !isVisited
+    })
+  }, [
+    areaAndSearchFilteredStations,
+    isLoggedIn,
+    visitsByStationId,
+    visitStatus,
+  ])
+
+  const visitedStationCount = useMemo(
+    () =>
+      filteredStations.filter((station) => visitsByStationId.has(station.id))
+        .length,
+    [filteredStations, visitsByStationId],
+  )
+  const unvisitedStationCount = filteredStations.length - visitedStationCount
 
   const countsByPrefectureCode = useMemo(() => {
     const counts = new Map<number, number>()
@@ -503,6 +640,66 @@ export function StationMap() {
     () =>
       new Set(filteredStations.map((station) => station.prefectureCode)).size,
     [filteredStations],
+  )
+
+  const loadVisits = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!isLoggedIn) {
+        setVisitsByStationId(new Map())
+        return
+      }
+
+      const response = await fetch('/api/me/visits', { signal })
+
+      if (response.status === 401) {
+        setVisitsByStationId(new Map())
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const visits = (await response.json()) as VisitSummary[]
+      setVisitsByStationId(
+        new Map(visits.map((visit) => [visit.stationId, visit])),
+      )
+    },
+    [isLoggedIn],
+  )
+
+  const loadCheckins = useCallback(
+    async (stationId: string, signal?: AbortSignal) => {
+      if (!isLoggedIn) {
+        setSelectedStationCheckins([])
+        return
+      }
+
+      setIsCheckinsLoading(true)
+
+      try {
+        const response = await fetch(`/api/stations/${stationId}/checkins`, {
+          signal,
+        })
+
+        if (response.status === 401) {
+          setSelectedStationCheckins([])
+          return
+        }
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+
+        const checkins = (await response.json()) as Checkin[]
+        setSelectedStationCheckins(checkins)
+      } finally {
+        if (signal === undefined || !signal.aborted) {
+          setIsCheckinsLoading(false)
+        }
+      }
+    },
+    [isLoggedIn],
   )
 
   useEffect(() => {
@@ -544,6 +741,55 @@ export function StationMap() {
   }, [])
 
   useEffect(() => {
+    if (!isLoggedIn) {
+      setVisitsByStationId(new Map())
+      setVisitStatus('all')
+      return
+    }
+
+    const controller = new AbortController()
+
+    void loadVisits(controller.signal).catch((error) => {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }, [authUserId, isLoggedIn, loadVisits])
+
+  useEffect(() => {
+    if (!isLoggedIn || selectedStationId === null) {
+      setSelectedStationCheckins([])
+      setIsCheckinsLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+
+    void loadCheckins(selectedStationId, controller.signal).catch((error) => {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }, [isLoggedIn, loadCheckins, selectedStationId])
+
+  useEffect(() => {
+    if (
+      selectedStationId !== null &&
+      !filteredStations.some((station) => station.id === selectedStationId)
+    ) {
+      setSelectedStationId(null)
+    }
+  }, [filteredStations, selectedStationId])
+
+  useEffect(() => {
     if (stations.length === 0 || !('geolocation' in navigator)) {
       return
     }
@@ -568,15 +814,59 @@ export function StationMap() {
     )
   }, [stations])
 
+  async function handleCheckin(station: Station) {
+    if (!isLoggedIn || checkinPendingStationIds.has(station.id)) {
+      return
+    }
+
+    setSelectedStationId(station.id)
+    setCheckinPendingStationIds((current) => new Set(current).add(station.id))
+
+    try {
+      const response = await fetch(`/api/stations/${station.id}/checkins`, {
+        body: JSON.stringify({}),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const createdCheckin = (await response.json()) as Checkin
+
+      if (station.id === selectedStationId || selectedStationId === null) {
+        setSelectedStationCheckins((current) => [
+          createdCheckin,
+          ...current.filter((checkin) => checkin.id !== createdCheckin.id),
+        ])
+      }
+
+      await Promise.all([loadVisits(), loadCheckins(station.id)])
+    } finally {
+      setCheckinPendingStationIds((current) => {
+        const next = new Set(current)
+        next.delete(station.id)
+        return next
+      })
+    }
+  }
+
   const filterPanel = (
     <StationFilter
       countsByPrefectureCode={countsByPrefectureCode}
       countsByRegionName={countsByRegionName}
       isVisitStatusDisabled={authState.status !== 'logged-in'}
       onChange={setSelectedPrefectureCodes}
+      onVisitStatusChange={setVisitStatus}
       selectedPrefectureCodes={selectedPrefectureCodes}
+      unvisitedStationCount={unvisitedStationCount}
+      visitedStationCount={visitedStationCount}
       visiblePrefectureCount={visiblePrefectureCount}
       visibleStationCount={filteredStations.length}
+      visitStatus={visitStatus}
     />
   )
 
@@ -608,7 +898,13 @@ export function StationMap() {
             submittedQuery={submittedQuery}
           />
           <MapZoomWatcher onZoomChange={setZoom} />
-          <StationMapMarkers stations={filteredStations} zoom={zoom} />
+          <StationMapMarkers
+            onStationSelect={(station) => setSelectedStationId(station.id)}
+            selectedStationId={selectedStationId}
+            stations={filteredStations}
+            visitsByStationId={visitsByStationId}
+            zoom={zoom}
+          />
         </MapContainer>
 
         <Button
@@ -634,7 +930,28 @@ export function StationMap() {
         )}
 
         {nearestStation !== null && (
-          <NearbyStationCard nearestStation={nearestStation} />
+          <NearbyStationCard
+            isCheckinPending={checkinPendingStationIds.has(
+              nearestStation.station.id,
+            )}
+            isLoggedIn={isLoggedIn}
+            nearestStation={nearestStation}
+            onCheckin={(station) => void handleCheckin(station)}
+            onSelect={(station) => setSelectedStationId(station.id)}
+          />
+        )}
+
+        {selectedStation !== null && (
+          <StationDetailPanel
+            checkins={selectedStationCheckins}
+            isCheckinPending={checkinPendingStationIds.has(selectedStation.id)}
+            isCheckinsLoading={isCheckinsLoading}
+            isLoggedIn={isLoggedIn}
+            onCheckin={(station) => void handleCheckin(station)}
+            onClose={() => setSelectedStationId(null)}
+            station={selectedStation}
+            visitSummary={visitsByStationId.get(selectedStation.id)}
+          />
         )}
 
         {(isLoading || errorMessage !== null) && (
