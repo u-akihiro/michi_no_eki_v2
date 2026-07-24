@@ -10,6 +10,7 @@ type StationDetailPanelProps = {
   isLoggedIn: boolean
   onCheckin: (station: Station) => void
   onClose: () => void
+  onEditCheckin: (checkin: Checkin) => void
   station: Station
   visitSummary: VisitSummary | undefined
 }
@@ -34,6 +35,7 @@ export function StationDetailPanel({
   isLoggedIn,
   onCheckin,
   onClose,
+  onEditCheckin,
   station,
   visitSummary,
 }: StationDetailPanelProps) {
@@ -145,12 +147,21 @@ export function StationDetailPanel({
                         className="rounded-lg border border-border bg-white px-4 py-3"
                         key={checkin.id}
                       >
-                        <time
-                          className="text-sm font-black text-text"
-                          dateTime={new Date(checkin.visitedAt).toISOString()}
-                        >
-                          {formatTimestamp(checkin.visitedAt)}
-                        </time>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <time
+                            className="text-sm font-black text-text"
+                            dateTime={new Date(checkin.visitedAt).toISOString()}
+                          >
+                            {formatTimestamp(checkin.visitedAt)}
+                          </time>
+                          <button
+                            className="text-xs font-black text-primary hover:text-primary-hover"
+                            onClick={() => onEditCheckin(checkin)}
+                            type="button"
+                          >
+                            記録を編集 →
+                          </button>
+                        </div>
                         {checkin.memo !== null && checkin.memo.length > 0 && (
                           <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-6 text-text-muted">
                             {checkin.memo}

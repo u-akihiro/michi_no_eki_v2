@@ -11,8 +11,15 @@ import {
 } from 'react-leaflet'
 
 import { PREFECTURE_NAME_BY_CODE, REGIONS } from '@michi-no-eki/shared'
-import type { Checkin, Station, VisitSummary } from '@michi-no-eki/shared'
+import type {
+  Checkin,
+  Station,
+  UpdateCheckinRequest,
+  VisitSummary,
+} from '@michi-no-eki/shared'
 
+import { CheckinRecordModal } from './checkin-record-modal'
+import { DeleteCheckinDialog } from './delete-checkin-dialog'
 import { StationDetailPanel } from './station-detail-panel'
 import { StationFilter } from './station-filter'
 import type { VisitStatus } from './station-filter'
@@ -39,6 +46,17 @@ type PrefectureCluster = {
 
 type NearestStation = {
   distanceKm: number
+  station: Station
+}
+
+type CheckinRecordModalState = {
+  checkin: Checkin
+  mode: 'create' | 'edit'
+  station: Station
+}
+
+type DeleteCheckinDialogState = {
+  checkin: Checkin
   station: Station
 }
 
@@ -537,6 +555,14 @@ export function StationMap() {
   const [checkinPendingStationIds, setCheckinPendingStationIds] = useState<
     ReadonlySet<string>
   >(() => new Set())
+  const [checkinRecordModal, setCheckinRecordModal] =
+    useState<CheckinRecordModalState | null>(null)
+  const [deleteCheckinDialog, setDeleteCheckinDialog] =
+    useState<DeleteCheckinDialogState | null>(null)
+  const [savingCheckinId, setSavingCheckinId] = useState<string | null>(null)
+  const [deletingCheckinId, setDeletingCheckinId] = useState<string | null>(
+    null,
+  )
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
@@ -837,20 +863,75 @@ export function StationMap() {
 
       const createdCheckin = (await response.json()) as Checkin
 
-      if (station.id === selectedStationId || selectedStationId === null) {
-        setSelectedStationCheckins((current) => [
-          createdCheckin,
-          ...current.filter((checkin) => checkin.id !== createdCheckin.id),
-        ])
-      }
-
       await Promise.all([loadVisits(), loadCheckins(station.id)])
+      setCheckinRecordModal({
+        checkin: createdCheckin,
+        mode: 'create',
+        station,
+      })
     } finally {
       setCheckinPendingStationIds((current) => {
         const next = new Set(current)
         next.delete(station.id)
         return next
       })
+    }
+  }
+
+  async function handleSaveCheckin(
+    checkin: Checkin,
+    station: Station,
+    request: UpdateCheckinRequest,
+  ) {
+    if (savingCheckinId !== null) {
+      return
+    }
+
+    setSavingCheckinId(checkin.id)
+
+    try {
+      const response = await fetch(`/api/checkins/${checkin.id}`, {
+        body: JSON.stringify(request),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        method: 'PATCH',
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      await response.json()
+      await Promise.all([loadVisits(), loadCheckins(station.id)])
+      setCheckinRecordModal(null)
+    } finally {
+      setSavingCheckinId(null)
+    }
+  }
+
+  async function handleDeleteCheckin(checkin: Checkin, station: Station) {
+    if (deletingCheckinId !== null) {
+      return
+    }
+
+    setDeletingCheckinId(checkin.id)
+
+    try {
+      const response = await fetch(`/api/checkins/${checkin.id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      await response.json()
+      await Promise.all([loadVisits(), loadCheckins(station.id)])
+      setDeleteCheckinDialog(null)
+      setCheckinRecordModal(null)
+    } finally {
+      setDeletingCheckinId(null)
     }
   }
 
@@ -949,8 +1030,63 @@ export function StationMap() {
             isLoggedIn={isLoggedIn}
             onCheckin={(station) => void handleCheckin(station)}
             onClose={() => setSelectedStationId(null)}
+            onEditCheckin={(checkin) =>
+              setCheckinRecordModal({
+                checkin,
+                mode: 'edit',
+                station: selectedStation,
+              })
+            }
             station={selectedStation}
             visitSummary={visitsByStationId.get(selectedStation.id)}
+          />
+        )}
+
+        {checkinRecordModal !== null && (
+          <CheckinRecordModal
+            checkin={checkinRecordModal.checkin}
+            isDismissDisabled={deleteCheckinDialog !== null}
+            isSaving={savingCheckinId === checkinRecordModal.checkin.id}
+            mode={checkinRecordModal.mode}
+            onClose={() => {
+              if (savingCheckinId === null) {
+                setCheckinRecordModal(null)
+              }
+            }}
+            onDeleteRequest={() =>
+              setDeleteCheckinDialog({
+                checkin: checkinRecordModal.checkin,
+                station: checkinRecordModal.station,
+              })
+            }
+            onSave={(request) =>
+              void handleSaveCheckin(
+                checkinRecordModal.checkin,
+                checkinRecordModal.station,
+                request,
+              )
+            }
+            station={checkinRecordModal.station}
+          />
+        )}
+
+        {deleteCheckinDialog !== null && (
+          <DeleteCheckinDialog
+            checkin={deleteCheckinDialog.checkin}
+            checkinCount={selectedStationCheckins.length}
+            isDeleting={deletingCheckinId === deleteCheckinDialog.checkin.id}
+            onClose={() => {
+              if (deletingCheckinId === null) {
+                setDeleteCheckinDialog(null)
+              }
+            }}
+            onConfirm={() =>
+              void handleDeleteCheckin(
+                deleteCheckinDialog.checkin,
+                deleteCheckinDialog.station,
+              )
+            }
+            station={deleteCheckinDialog.station}
           />
         )}
 
