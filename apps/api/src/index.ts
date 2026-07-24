@@ -43,7 +43,15 @@ app.get('/api/me', async (c) => {
   if (!user) {
     return c.json({ error: 'unauthorized' }, 401)
   }
-  return c.json({ user })
+  return c.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      pictureUrl: user.pictureUrl,
+      createdAt: user.createdAt,
+    },
+  })
 })
 
 app.get('/api/me/visits', async (c) => {

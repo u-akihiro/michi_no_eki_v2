@@ -6,6 +6,7 @@ export type AuthUser = {
   email: string
   name: string
   pictureUrl?: string | null
+  createdAt: number
 }
 
 export type AuthState =
