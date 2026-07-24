@@ -5,16 +5,20 @@ import type { Region } from '@michi-no-eki/shared'
 
 import { cn } from '@/lib/utils'
 
-type VisitStatus = 'all' | 'visited' | 'unvisited'
+export type VisitStatus = 'all' | 'visited' | 'unvisited'
 
 type StationFilterProps = {
   countsByPrefectureCode: ReadonlyMap<number, number>
   countsByRegionName: ReadonlyMap<Region['name'], number>
   isVisitStatusDisabled: boolean
   onChange: (nextSelectedPrefectureCodes: Set<number>) => void
+  onVisitStatusChange: (visitStatus: VisitStatus) => void
   selectedPrefectureCodes: ReadonlySet<number>
+  unvisitedStationCount: number
+  visitedStationCount: number
   visiblePrefectureCount: number
   visibleStationCount: number
+  visitStatus: VisitStatus
 }
 
 type RegionSelectionState = 'all' | 'partial' | 'none'
@@ -74,11 +78,14 @@ export function StationFilter({
   countsByRegionName,
   isVisitStatusDisabled,
   onChange,
+  onVisitStatusChange,
   selectedPrefectureCodes,
+  unvisitedStationCount,
+  visitedStationCount,
   visiblePrefectureCount,
   visibleStationCount,
+  visitStatus,
 }: StationFilterProps) {
-  const [visitStatus, setVisitStatus] = useState<VisitStatus>('all')
   const [expandedRegionNames, setExpandedRegionNames] = useState<
     ReadonlySet<Region['name']>
   >(() => new Set(REGIONS.map((region) => region.name)))
@@ -162,7 +169,7 @@ export function StationFilter({
               )}
               disabled={isVisitStatusDisabled}
               key={value}
-              onClick={() => setVisitStatus(value as VisitStatus)}
+              onClick={() => onVisitStatusChange(value as VisitStatus)}
               type="button"
             >
               {label}
@@ -278,11 +285,11 @@ export function StationFilter({
         <div className="space-y-2 text-xs font-medium text-text-muted">
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-            <span>訪問済み -</span>
+            <span>訪問済み {visitedStationCount}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full border border-slate-400 bg-white" />
-            <span>未訪問 {visibleStationCount}</span>
+            <span>未訪問 {unvisitedStationCount}</span>
           </div>
         </div>
       </div>
