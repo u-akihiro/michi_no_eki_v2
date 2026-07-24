@@ -12,6 +12,8 @@
     "db:seed:generate": "node --import tsx src/scripts/generate-stations-seed.ts",
     "db:seed:local": "pnpm db:seed:generate && wrangler d1 execute michieki_db --local --file=drizzle/seed/stations.sql",
     "db:seed:remote": "pnpm db:seed:generate && wrangler d1 execute michieki_db --remote --file=drizzle/seed/stations.sql",
+    "dev:session": "node --import tsx src/scripts/create-dev-session.ts",
+    "dev:session:clear": "node --import tsx src/scripts/create-dev-session.ts --clear",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"
   },

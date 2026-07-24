@@ -129,6 +129,17 @@ pnpm build   # 全体ビルド
 - QAシナリオ管理: `docs/qa-scenarios.md`
 - 認証: Google OAuthは `storageState` 方式（自動ログイン不可）
 
+### ローカルでの擬似ログイン（dev 専用）
+
+`vite dev` では Google OAuth ログインが動かないため、認証後の画面をローカル確認するには擬似セッションを使う（**ローカル D1 限定・本番禁止**）:
+
+```bash
+pnpm --filter api dev:session        # dev ユーザー+セッション作成、クッキー案内を表示
+pnpm --filter api dev:session:clear  # 後始末（記録/セッション/ユーザー削除）
+```
+
+作成後、ブラウザ Console で `document.cookie='session_id=dev-session; path=/'; location.reload()` を実行するとログイン状態になる。
+
 ## デプロイ
 
 - **Preview**: PRごとにCloudflareが自動発行（Pages/Workers両方）
