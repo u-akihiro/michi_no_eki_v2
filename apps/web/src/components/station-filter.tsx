@@ -173,17 +173,29 @@ export function StationFilter({
 
       <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-black text-text">
-            エリア(地方・都道府県)
-          </h2>
+          <h2 className="text-sm font-black text-text">地域で絞り込む</h2>
           <button
-            className="text-xs font-bold text-primary hover:text-primary-hover"
+            className="text-xs font-bold text-primary hover:text-primary-hover disabled:text-text-subtle disabled:hover:text-text-subtle"
+            disabled={selectedPrefectureCodes.size === 0}
             onClick={clearSelection}
             type="button"
           >
             クリア
           </button>
         </div>
+
+        {selectedPrefectureCodes.size === 0 ? (
+          <div className="mb-3 rounded-md bg-primary/10 px-3 py-2 text-xs font-bold text-primary">
+            全国を表示中
+            <span className="ml-1.5 font-medium text-text-muted">
+              地方・都道府県を選ぶと絞り込めます
+            </span>
+          </div>
+        ) : (
+          <div className="mb-3 text-xs font-medium text-text-muted">
+            選択した地域に絞り込み中
+          </div>
+        )}
 
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
           {REGIONS.map((region) => {
@@ -255,10 +267,6 @@ export function StationFilter({
             )
           })}
         </div>
-
-        <p className="mt-3 text-xs font-medium text-text-subtle">
-          未選択の場合は全国を表示します
-        </p>
       </div>
 
       <div className="m-5 mt-0 rounded-lg bg-background p-4">
