@@ -1,1 +1,35 @@
 @import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    'Noto Sans JP', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
+
+  --color-primary: oklch(0.5 0.13 250);
+  --color-primary-hover: oklch(0.42 0.13 250);
+  --color-text: oklch(0.28 0.02 250);
+  --color-text-muted: oklch(0.55 0.02 250);
+  --color-text-subtle: oklch(0.6 0.02 250);
+  --color-background: oklch(0.97 0.008 245);
+  --color-border: oklch(0.9 0.01 250);
+  --color-danger: oklch(0.5 0.18 25);
+  --color-heatmap-1: oklch(0.94 0.02 250);
+  --color-heatmap-2: oklch(0.88 0.045 250);
+  --color-heatmap-3: oklch(0.82 0.07 250);
+  --color-heatmap-4: oklch(0.72 0.1 250);
+  --color-heatmap-5: oklch(0.62 0.12 250);
+  --color-heatmap-6: oklch(0.52 0.135 250);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
