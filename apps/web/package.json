@@ -17,6 +17,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-leaflet": "catalog:",
+    "react-router-dom": "catalog:",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {

@@ -344,7 +344,7 @@ export function StationMap() {
         <StationMapMarkers stations={filteredStations} zoom={zoom} />
       </MapContainer>
 
-      <div className="absolute left-3 top-20 z-[1000]">
+      <div className="absolute left-3 top-3 z-[1000]">
         <StationFilter
           countsByPrefectureCode={countsByPrefectureCode}
           countsByRegionName={countsByRegionName}

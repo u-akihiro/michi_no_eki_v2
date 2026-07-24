@@ -82,7 +82,7 @@ export function AuthControl() {
 
   if (authState.status === 'loading') {
     return (
-      <div className="rounded-md bg-white/95 px-3 py-2 text-sm font-medium text-slate-700 shadow">
+      <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-text-muted">
         認証状態を確認中...
       </div>
     )
@@ -97,19 +97,19 @@ export function AuthControl() {
   }
 
   return (
-    <div className="flex max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-md bg-white/95 px-2 py-2 shadow">
+    <div className="flex max-w-[calc(100vw-1.5rem)] items-center gap-2">
       {authState.user.pictureUrl !== null &&
         authState.user.pictureUrl !== undefined && (
           <img
             alt={`${authState.user.name} のアバター`}
-            className="h-8 w-8 shrink-0 rounded-full bg-slate-200 object-cover"
-            height={32}
+            className="h-9 w-9 shrink-0 rounded-full border-[1.5px] border-primary bg-slate-200 object-cover"
+            height={36}
             referrerPolicy="no-referrer"
             src={authState.user.pictureUrl}
-            width={32}
+            width={36}
           />
         )}
-      <span className="min-w-0 max-w-40 truncate text-sm font-medium text-slate-900">
+      <span className="min-w-0 max-w-40 truncate text-sm font-medium text-text">
         {authState.user.name}
       </span>
       <Button
@@ -117,6 +117,7 @@ export function AuthControl() {
         onClick={() => void handleLogout()}
         size="sm"
         type="button"
+        variant="ghost"
       >
         {isLoggingOut ? 'ログアウト中...' : 'ログアウト'}
       </Button>

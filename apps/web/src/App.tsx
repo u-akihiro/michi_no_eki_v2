@@ -1,13 +1,17 @@
-import { AuthControl } from './components/auth-control'
-import { StationMap } from './components/station-map'
+import { Navigate, Route, Routes } from 'react-router-dom'
+
+import { AppShell } from './components/app-shell/app-shell'
+import { MapPage } from './pages/map-page'
+import { MyPagePage } from './pages/mypage-page'
 
 export default function App() {
   return (
-    <main className="relative h-screen w-screen overflow-hidden bg-slate-100">
-      <StationMap />
-      <div className="absolute right-3 top-3 z-[1000]">
-        <AuthControl />
-      </div>
-    </main>
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route element={<MapPage />} index />
+        <Route element={<MyPagePage />} path="mypage" />
+        <Route element={<Navigate replace to="/" />} path="*" />
+      </Route>
+    </Routes>
   )
 }
