@@ -157,8 +157,70 @@ export const StationSchema = z.object({
 
 export const StationsSchema = z.array(StationSchema)
 
+export const CheckinSchema = z.object({
+  id: z.uuid(),
+  userId: z.uuid(),
+  stationId: z.uuid(),
+  visitedAt: z.number().int().nonnegative(),
+  memo: z.string().nullable(),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+})
+
+export const CreateCheckinRequestSchema = z.object({
+  visitedAt: z.number().int().nonnegative().optional(),
+  memo: z.string().nullable().optional(),
+})
+
+export const UpdateCheckinRequestSchema = z
+  .object({
+    visitedAt: z.number().int().nonnegative().optional(),
+    memo: z.string().nullable().optional(),
+  })
+  .refine((value) => value.visitedAt !== undefined || value.memo !== undefined)
+
+export const VisitSummarySchema = z.object({
+  stationId: z.uuid(),
+  visitCount: z.number().int().nonnegative(),
+  lastVisitedAt: z.number().int().nonnegative(),
+})
+
+export const StatsSchema = z.object({
+  visitedStationCount: z.number().int().nonnegative(),
+  checkinCount: z.number().int().nonnegative(),
+  visitedPrefectureCount: z.number().int().nonnegative(),
+})
+
+export const RecentCheckinSchema = z.object({
+  id: z.uuid(),
+  stationId: z.uuid(),
+  stationName: z.string().min(1),
+  prefectureCode: z.number().int().min(1).max(47),
+  visitedAt: z.number().int().nonnegative(),
+  memo: z.string().nullable(),
+})
+
+export const PrefectureProgressSchema = z.object({
+  prefectureCode: z.number().int().min(1).max(47),
+  visitedStationCount: z.number().int().nonnegative(),
+  totalStationCount: z.number().int().nonnegative(),
+  progressRate: z.number().min(0).max(1),
+})
+
+export const CheckinsSchema = z.array(CheckinSchema)
+export const VisitsSchema = z.array(VisitSummarySchema)
+export const RecentCheckinsSchema = z.array(RecentCheckinSchema)
+export const PrefectureProgressListSchema = z.array(PrefectureProgressSchema)
+
 export type PrefectureName = keyof typeof PREFECTURE_CODE_BY_NAME
 export type PrefectureCode =
   (typeof PREFECTURE_CODE_BY_NAME)[keyof typeof PREFECTURE_CODE_BY_NAME]
 export type Region = (typeof REGIONS)[number]
 export type Station = z.infer<typeof StationSchema>
+export type Checkin = z.infer<typeof CheckinSchema>
+export type CreateCheckinRequest = z.infer<typeof CreateCheckinRequestSchema>
+export type UpdateCheckinRequest = z.infer<typeof UpdateCheckinRequestSchema>
+export type VisitSummary = z.infer<typeof VisitSummarySchema>
+export type Stats = z.infer<typeof StatsSchema>
+export type RecentCheckin = z.infer<typeof RecentCheckinSchema>
+export type PrefectureProgress = z.infer<typeof PrefectureProgressSchema>

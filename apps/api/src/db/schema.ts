@@ -43,3 +43,24 @@ export const sessions = sqliteTable(
   },
   (table) => [index('sessions_expires_at_idx').on(table.expiresAt)],
 )
+
+export const checkins = sqliteTable(
+  'checkins',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    stationId: text('station_id')
+      .notNull()
+      .references(() => stations.id),
+    visitedAt: integer('visited_at').notNull(),
+    memo: text('memo'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    index('checkins_user_station_idx').on(table.userId, table.stationId),
+    index('checkins_user_visited_at_idx').on(table.userId, table.visitedAt),
+  ],
+)
