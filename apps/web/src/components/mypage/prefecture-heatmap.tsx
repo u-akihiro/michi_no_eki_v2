@@ -84,11 +84,6 @@ export function PrefectureHeatmap({
       })
   }, [metric, prefectureProgress])
 
-  const selectedProgress =
-    selectedCode === null
-      ? undefined
-      : getProgress(progressByCode, selectedCode)
-
   // SVG は一度だけ ref 経由で注入する。dangerouslySetInnerHTML だと再レンダー
   // 時に React が innerHTML を巻き戻し、下の塗り分け(命令的 DOM 変更)が消える。
   useEffect(() => {
@@ -118,7 +113,10 @@ export function PrefectureHeatmap({
       mapElement.querySelectorAll<SVGGElement>('.prefecture'),
     )
 
-    const updateTooltipPosition = (event: PointerEvent, code: number) => {
+    const showTooltip = (
+      event: { clientX: number; clientY: number },
+      code: number,
+    ) => {
       const rect = mapElement.getBoundingClientRect()
       const x = Math.min(Math.max(event.clientX - rect.left, 8), rect.width - 8)
       const y = Math.min(
@@ -133,6 +131,11 @@ export function PrefectureHeatmap({
         y,
       })
     }
+
+    const hideTooltip = () =>
+      setTooltip((current) =>
+        current === null ? current : { ...current, visible: false },
+      )
 
     const cleanups = prefectureElements.map((element) => {
       const code = Number(element.dataset.code)
@@ -153,18 +156,24 @@ export function PrefectureHeatmap({
 
       const handlePointerEnter = (event: PointerEvent) => {
         setSelectedCode(code)
-        updateTooltipPosition(event, code)
+        showTooltip(event, code)
       }
       const handlePointerMove = (event: PointerEvent) => {
-        updateTooltipPosition(event, code)
+        // マウス追従はホバー中のみ。タッチはタップ位置で固定表示する。
+        if (event.pointerType === 'mouse') {
+          showTooltip(event, code)
+        }
       }
-      const handlePointerLeave = () => {
-        setTooltip((current) =>
-          current?.code === code ? { ...current, visible: false } : current,
-        )
+      const handlePointerLeave = (event: PointerEvent) => {
+        // タッチはタップで固定表示したいので、マウスのホバー離脱時だけ隠す。
+        if (event.pointerType === 'mouse') {
+          hideTooltip()
+        }
       }
-      const handleClick = () => {
+      const handleClick = (event: MouseEvent) => {
+        // タップ（およびクリック）で件数・%を表示・固定する。
         setSelectedCode(code)
+        showTooltip(event, code)
       }
       const handleFocus = () => {
         setSelectedCode(code)
@@ -185,8 +194,19 @@ export function PrefectureHeatmap({
       }
     })
 
+    // 県以外（海・余白）をクリック/タップしたらツールチップを閉じる。
+    const handleMapClick = (event: MouseEvent) => {
+      const target = event.target as Element | null
+      if (target !== null && target.closest('.prefecture') !== null) {
+        return
+      }
+      hideTooltip()
+    }
+    mapElement.addEventListener('click', handleMapClick)
+
     return () => {
       cleanups.forEach((cleanup) => cleanup())
+      mapElement.removeEventListener('click', handleMapClick)
     }
   }, [maxVisitedCount, metric, progressByCode, selectedCode])
 
@@ -287,22 +307,19 @@ export function PrefectureHeatmap({
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(240px,0.65fr)]">
-        <SelectedPrefecturePanel progress={selectedProgress} />
-        <div className="rounded-lg border border-border bg-white p-5 shadow-sm">
-          <p className="text-sm font-bold text-text-muted">全国進捗</p>
-          <p className="mt-3 text-2xl font-black tabular-nums text-primary">
-            {totals.visitedStationCount} / {totals.totalStationCount}駅
-          </p>
-          <p className="mt-1 text-sm font-bold text-text-muted">
-            {formatPercent(totals.progressRate)}%
-          </p>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-primary/10">
-            <div
-              className="h-full rounded-full bg-primary"
-              style={{ width: `${formatPercent(totals.progressRate)}%` }}
-            />
-          </div>
+      <section className="rounded-lg border border-border bg-white p-5 shadow-sm sm:max-w-sm">
+        <p className="text-sm font-bold text-text-muted">全国進捗</p>
+        <p className="mt-3 text-2xl font-black tabular-nums text-primary">
+          {totals.visitedStationCount} / {totals.totalStationCount}駅
+        </p>
+        <p className="mt-1 text-sm font-bold text-text-muted">
+          {formatPercent(totals.progressRate)}%
+        </p>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-primary/10">
+          <div
+            className="h-full rounded-full bg-primary"
+            style={{ width: `${formatPercent(totals.progressRate)}%` }}
+          />
         </div>
       </section>
     </div>
@@ -387,46 +404,6 @@ function RankingRow({
         />
       </div>
     </button>
-  )
-}
-
-function SelectedPrefecturePanel({
-  progress,
-}: {
-  progress: PrefectureProgress | undefined
-}) {
-  if (progress === undefined) {
-    return (
-      <div className="rounded-lg border border-border bg-white p-5 shadow-sm">
-        <p className="text-sm font-bold text-text-muted">選択中の都道府県</p>
-        <p className="mt-3 text-sm font-medium text-text-muted">
-          地図またはランキングから都道府県を選択できます。
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="rounded-lg border border-border bg-white p-5 shadow-sm">
-      <p className="text-sm font-bold text-text-muted">選択中の都道府県</p>
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h3 className="text-xl font-black text-text">
-            {getPrefectureName(progress.prefectureCode)}
-          </h3>
-          <p className="mt-1 text-sm font-bold text-text-muted">
-            {progress.visitedStationCount}/{progress.totalStationCount}駅 ・{' '}
-            {formatPercent(progress.progressRate)}%
-          </p>
-        </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-primary/10 sm:w-56">
-          <div
-            className="h-full rounded-full bg-primary"
-            style={{ width: `${formatPercent(progress.progressRate)}%` }}
-          />
-        </div>
-      </div>
-    </div>
   )
 }
 
