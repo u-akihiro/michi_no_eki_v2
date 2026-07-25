@@ -67,18 +67,21 @@ export function PrefectureHeatmap({
   }, [prefectureProgress])
 
   const ranking = useMemo(() => {
-    return [...prefectureProgress].sort((a, b) => {
-      const primary =
-        metric === 'rate'
-          ? b.progressRate - a.progressRate
-          : b.visitedStationCount - a.visitedStationCount
+    // 未訪問(0件)の県はランキングに出さない（概要タブの進捗表示と方針を揃える）。
+    return prefectureProgress
+      .filter((progress) => progress.visitedStationCount > 0)
+      .sort((a, b) => {
+        const primary =
+          metric === 'rate'
+            ? b.progressRate - a.progressRate
+            : b.visitedStationCount - a.visitedStationCount
 
-      if (primary !== 0) {
-        return primary
-      }
+        if (primary !== 0) {
+          return primary
+        }
 
-      return b.progressRate - a.progressRate
-    })
+        return b.progressRate - a.progressRate
+      })
   }, [metric, prefectureProgress])
 
   const selectedProgress =
@@ -260,19 +263,25 @@ export function PrefectureHeatmap({
               {metric === 'rate' ? '訪問率順' : '訪問件数順'}
             </p>
             <div className="mt-4 max-h-[560px] overflow-y-auto pr-1">
-              <div className="flex flex-col gap-3">
-                {ranking.map((progress, index) => (
-                  <RankingRow
-                    isSelected={selectedCode === progress.prefectureCode}
-                    key={progress.prefectureCode}
-                    maxVisitedCount={maxVisitedCount}
-                    metric={metric}
-                    progress={progress}
-                    rank={index + 1}
-                    onSelect={setSelectedCode}
-                  />
-                ))}
-              </div>
+              {ranking.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-white px-4 py-8 text-center text-sm font-medium text-text-muted">
+                  まだ訪問した都道府県はありません。
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {ranking.map((progress, index) => (
+                    <RankingRow
+                      isSelected={selectedCode === progress.prefectureCode}
+                      key={progress.prefectureCode}
+                      maxVisitedCount={maxVisitedCount}
+                      metric={metric}
+                      progress={progress}
+                      rank={index + 1}
+                      onSelect={setSelectedCode}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </aside>
         </div>
