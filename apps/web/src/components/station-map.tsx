@@ -10,7 +10,11 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 
-import { PREFECTURE_NAME_BY_CODE, REGIONS } from '@michi-no-eki/shared'
+import {
+  getStationAreaCode,
+  PREFECTURE_NAME_BY_CODE,
+  REGIONS,
+} from '@michi-no-eki/shared'
 import type {
   Checkin,
   Station,
@@ -566,9 +570,9 @@ export function StationMap() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
-  const [selectedPrefectureCodes, setSelectedPrefectureCodes] = useState<
-    Set<number>
-  >(() => new Set())
+  const [selectedAreaCodes, setSelectedAreaCodes] = useState<Set<number>>(
+    () => new Set(),
+  )
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   const [nearestStation, setNearestStation] = useState<NearestStation | null>(
     null,
@@ -587,15 +591,25 @@ export function StationMap() {
     [selectedStationId, stations],
   )
 
+  const areaCodeByStationId = useMemo(
+    () =>
+      new Map(
+        stations.map((station) => [station.id, getStationAreaCode(station)]),
+      ),
+    [stations],
+  )
+
   const areaFilteredStations = useMemo(() => {
-    if (selectedPrefectureCodes.size === 0) {
+    if (selectedAreaCodes.size === 0) {
       return stations
     }
 
-    return stations.filter((station) =>
-      selectedPrefectureCodes.has(station.prefectureCode),
-    )
-  }, [selectedPrefectureCodes, stations])
+    return stations.filter((station) => {
+      const areaCode = areaCodeByStationId.get(station.id)
+
+      return areaCode !== undefined && selectedAreaCodes.has(areaCode)
+    })
+  }, [areaCodeByStationId, selectedAreaCodes, stations])
 
   const areaAndSearchFilteredStations = useMemo(() => {
     if (normalizedQuery.length === 0) {
@@ -632,18 +646,19 @@ export function StationMap() {
   )
   const unvisitedStationCount = filteredStations.length - visitedStationCount
 
-  const countsByPrefectureCode = useMemo(() => {
+  const countsByAreaCode = useMemo(() => {
     const counts = new Map<number, number>()
 
     for (const station of stations) {
-      counts.set(
-        station.prefectureCode,
-        (counts.get(station.prefectureCode) ?? 0) + 1,
-      )
+      const areaCode = areaCodeByStationId.get(station.id)
+
+      if (areaCode !== undefined) {
+        counts.set(areaCode, (counts.get(areaCode) ?? 0) + 1)
+      }
     }
 
     return counts
-  }, [stations])
+  }, [areaCodeByStationId, stations])
 
   const countsByRegionName = useMemo(() => {
     const counts = new Map<(typeof REGIONS)[number]['name'], number>()
@@ -651,16 +666,15 @@ export function StationMap() {
     for (const region of REGIONS) {
       counts.set(
         region.name,
-        region.prefectureCodes.reduce(
-          (sum, prefectureCode) =>
-            sum + (countsByPrefectureCode.get(prefectureCode) ?? 0),
+        region.areaCodes.reduce(
+          (sum, areaCode) => sum + (countsByAreaCode.get(areaCode) ?? 0),
           0,
         ),
       )
     }
 
     return counts
-  }, [countsByPrefectureCode])
+  }, [countsByAreaCode])
 
   const visiblePrefectureCount = useMemo(
     () =>
@@ -937,12 +951,12 @@ export function StationMap() {
 
   const filterPanel = (
     <StationFilter
-      countsByPrefectureCode={countsByPrefectureCode}
+      countsByAreaCode={countsByAreaCode}
       countsByRegionName={countsByRegionName}
       isVisitStatusDisabled={authState.status !== 'logged-in'}
-      onChange={setSelectedPrefectureCodes}
+      onChange={setSelectedAreaCodes}
       onVisitStatusChange={setVisitStatus}
-      selectedPrefectureCodes={selectedPrefectureCodes}
+      selectedAreaCodes={selectedAreaCodes}
       unvisitedStationCount={unvisitedStationCount}
       visitedStationCount={visitedStationCount}
       visiblePrefectureCount={visiblePrefectureCount}
@@ -971,7 +985,7 @@ export function StationMap() {
             url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <MapResizeWatcher
-            token={`${isMobileFilterOpen}-${selectedPrefectureCodes.size}`}
+            token={`${isMobileFilterOpen}-${selectedAreaCodes.size}`}
           />
           <SearchPanWatcher
             onZoomChange={setZoom}

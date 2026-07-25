@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { PREFECTURE_NAME_BY_CODE, REGIONS } from '@michi-no-eki/shared'
+import { AREA_LABEL_BY_CODE, REGIONS } from '@michi-no-eki/shared'
 import type { Region } from '@michi-no-eki/shared'
 
 import { cn } from '@/lib/utils'
@@ -8,12 +8,12 @@ import { cn } from '@/lib/utils'
 export type VisitStatus = 'all' | 'visited' | 'unvisited'
 
 type StationFilterProps = {
-  countsByPrefectureCode: ReadonlyMap<number, number>
+  countsByAreaCode: ReadonlyMap<number, number>
   countsByRegionName: ReadonlyMap<Region['name'], number>
   isVisitStatusDisabled: boolean
-  onChange: (nextSelectedPrefectureCodes: Set<number>) => void
+  onChange: (nextSelectedAreaCodes: Set<number>) => void
   onVisitStatusChange: (visitStatus: VisitStatus) => void
-  selectedPrefectureCodes: ReadonlySet<number>
+  selectedAreaCodes: ReadonlySet<number>
   unvisitedStationCount: number
   visitedStationCount: number
   visiblePrefectureCount: number
@@ -25,13 +25,13 @@ type RegionSelectionState = 'all' | 'partial' | 'none'
 
 export function getRegionSelectionState(
   region: Region,
-  selectedPrefectureCodes: ReadonlySet<number>,
+  selectedAreaCodes: ReadonlySet<number>,
 ): RegionSelectionState {
-  const selectedCount = region.prefectureCodes.filter((prefectureCode) =>
-    selectedPrefectureCodes.has(prefectureCode),
+  const selectedCount = region.areaCodes.filter((areaCode) =>
+    selectedAreaCodes.has(areaCode),
   ).length
 
-  if (selectedCount === region.prefectureCodes.length) {
+  if (selectedCount === region.areaCodes.length) {
     return 'all'
   }
 
@@ -74,12 +74,12 @@ function FilterCheckbox({
 }
 
 export function StationFilter({
-  countsByPrefectureCode,
+  countsByAreaCode,
   countsByRegionName,
   isVisitStatusDisabled,
   onChange,
   onVisitStatusChange,
-  selectedPrefectureCodes,
+  selectedAreaCodes,
   unvisitedStationCount,
   visitedStationCount,
   visiblePrefectureCount,
@@ -95,33 +95,30 @@ export function StationFilter({
   }
 
   function toggleRegion(region: Region) {
-    const selectionState = getRegionSelectionState(
-      region,
-      selectedPrefectureCodes,
-    )
-    const nextSelectedPrefectureCodes = new Set(selectedPrefectureCodes)
+    const selectionState = getRegionSelectionState(region, selectedAreaCodes)
+    const nextSelectedAreaCodes = new Set(selectedAreaCodes)
 
-    for (const prefectureCode of region.prefectureCodes) {
+    for (const areaCode of region.areaCodes) {
       if (selectionState === 'all') {
-        nextSelectedPrefectureCodes.delete(prefectureCode)
+        nextSelectedAreaCodes.delete(areaCode)
       } else {
-        nextSelectedPrefectureCodes.add(prefectureCode)
+        nextSelectedAreaCodes.add(areaCode)
       }
     }
 
-    onChange(nextSelectedPrefectureCodes)
+    onChange(nextSelectedAreaCodes)
   }
 
-  function togglePrefecture(prefectureCode: number) {
-    const nextSelectedPrefectureCodes = new Set(selectedPrefectureCodes)
+  function toggleArea(areaCode: number) {
+    const nextSelectedAreaCodes = new Set(selectedAreaCodes)
 
-    if (nextSelectedPrefectureCodes.has(prefectureCode)) {
-      nextSelectedPrefectureCodes.delete(prefectureCode)
+    if (nextSelectedAreaCodes.has(areaCode)) {
+      nextSelectedAreaCodes.delete(areaCode)
     } else {
-      nextSelectedPrefectureCodes.add(prefectureCode)
+      nextSelectedAreaCodes.add(areaCode)
     }
 
-    onChange(nextSelectedPrefectureCodes)
+    onChange(nextSelectedAreaCodes)
   }
 
   function toggleRegionExpansion(regionName: Region['name']) {
@@ -183,7 +180,7 @@ export function StationFilter({
           <h2 className="text-sm font-black text-text">地域で絞り込む</h2>
           <button
             className="text-xs font-bold text-primary hover:text-primary-hover disabled:text-text-subtle disabled:hover:text-text-subtle"
-            disabled={selectedPrefectureCodes.size === 0}
+            disabled={selectedAreaCodes.size === 0}
             onClick={clearSelection}
             type="button"
           >
@@ -195,12 +192,12 @@ export function StationFilter({
             同じ体裁・同じ行数(太字1行+補助1行)のボックスに揃える。 */}
         <div className="mb-3 rounded-md bg-primary/10 px-3 py-2 text-xs">
           <p className="font-bold text-primary">
-            {selectedPrefectureCodes.size === 0
+            {selectedAreaCodes.size === 0
               ? '全国を表示中'
               : '選択した地域に絞り込み中'}
           </p>
           <p className="mt-0.5 font-medium text-text-muted">
-            {selectedPrefectureCodes.size === 0
+            {selectedAreaCodes.size === 0
               ? '地方・都道府県を選ぶと絞り込めます'
               : '「クリア」で全国表示に戻せます'}
           </p>
@@ -210,7 +207,7 @@ export function StationFilter({
           {REGIONS.map((region) => {
             const selectionState = getRegionSelectionState(
               region,
-              selectedPrefectureCodes,
+              selectedAreaCodes,
             )
             const isExpanded = expandedRegionNames.has(region.name)
             const regionCount = countsByRegionName.get(region.name) ?? 0
@@ -243,29 +240,26 @@ export function StationFilter({
 
                 {isExpanded && (
                   <div className="mt-1 space-y-1 pl-10">
-                    {region.prefectureCodes.map((prefectureCode) => {
-                      const prefectureName =
-                        PREFECTURE_NAME_BY_CODE[prefectureCode]
-                      const prefectureCount =
-                        countsByPrefectureCode.get(prefectureCode) ?? 0
+                    {region.areaCodes.map((areaCode) => {
+                      const areaName =
+                        AREA_LABEL_BY_CODE[areaCode] ?? `エリア${areaCode}`
+                      const areaCount = countsByAreaCode.get(areaCode) ?? 0
 
                       return (
                         <label
                           className="flex items-center gap-2 rounded-md px-1 py-1 text-sm hover:bg-background"
-                          key={prefectureCode}
+                          key={areaCode}
                         >
                           <FilterCheckbox
-                            checked={selectedPrefectureCodes.has(
-                              prefectureCode,
-                            )}
-                            label={`${prefectureName}を選択`}
-                            onChange={() => togglePrefecture(prefectureCode)}
+                            checked={selectedAreaCodes.has(areaCode)}
+                            label={`${areaName}を選択`}
+                            onChange={() => toggleArea(areaCode)}
                           />
                           <span className="min-w-0 flex-1 truncate">
-                            {prefectureName}
+                            {areaName}
                           </span>
                           <span className="text-xs font-medium text-text-muted">
-                            {prefectureCount}
+                            {areaCount}
                           </span>
                         </label>
                       )
