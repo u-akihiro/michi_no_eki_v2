@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 
-@theme {
+/* static: `var(--color-heatmap-*)` はヒートマップの塗り分けで直接参照するため、
+   未使用トークンとしてツリーシェイクされないよう常に CSS 変数を出力する。 */
+@theme static {
   --font-sans:
     'Noto Sans JP', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     'Segoe UI', sans-serif;

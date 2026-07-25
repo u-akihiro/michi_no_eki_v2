@@ -11,6 +11,7 @@ import type {
 import type { AuthUser } from '@/contexts/auth-context'
 import { useAuth } from '@/contexts/auth-context'
 import { cn } from '@/lib/utils'
+import { PrefectureHeatmap } from '@/components/mypage/prefecture-heatmap'
 
 type MyPageData = {
   stats: Stats
@@ -175,7 +176,9 @@ export function MyPagePage() {
           onShowHeatmap={() => setActiveTab('heatmap')}
         />
       )}
-      {activeTab === 'heatmap' && <HeatmapPlaceholder />}
+      {activeTab === 'heatmap' && (
+        <PrefectureHeatmap prefectureProgress={data.prefectureProgress} />
+      )}
       {activeTab === 'checkins' && <CheckinsTab checkins={data.checkins} />}
     </PageFrame>
   )
@@ -428,15 +431,6 @@ function PrefectureProgressRow({ progress }: { progress: PrefectureProgress }) {
         />
       </div>
     </div>
-  )
-}
-
-function HeatmapPlaceholder() {
-  return (
-    <CenteredPanel
-      description="全国タイルグリッドのヒートマップは Phase 5b で実装予定です。"
-      title="準備中（Phase 5b）"
-    />
   )
 }
 
