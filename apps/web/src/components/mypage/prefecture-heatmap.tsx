@@ -86,19 +86,30 @@ export function PrefectureHeatmap({
       ? undefined
       : getProgress(progressByCode, selectedCode)
 
+  // SVG は一度だけ ref 経由で注入する。dangerouslySetInnerHTML だと再レンダー
+  // 時に React が innerHTML を巻き戻し、下の塗り分け(命令的 DOM 変更)が消える。
   useEffect(() => {
     const mapElement = mapRef.current
 
-    if (mapElement === null) {
+    if (mapElement === null || mapElement.querySelector('svg') !== null) {
       return
     }
 
+    mapElement.innerHTML = japanMapSvg
     const svgElement = mapElement.querySelector('svg')
     svgElement?.setAttribute('role', 'img')
     svgElement?.setAttribute(
       'aria-label',
       '都道府県別の道の駅訪問状況ヒートマップ',
     )
+  }, [])
+
+  useEffect(() => {
+    const mapElement = mapRef.current
+
+    if (mapElement === null) {
+      return
+    }
 
     const prefectureElements = Array.from(
       mapElement.querySelectorAll<SVGGElement>('.prefecture'),
@@ -218,7 +229,6 @@ export function PrefectureHeatmap({
             <div className="relative overflow-hidden rounded-lg border border-border bg-background p-3 sm:p-5">
               <div
                 className="[&_svg]:mx-auto [&_svg]:block [&_svg]:h-auto [&_svg]:max-h-[68vh] [&_svg]:w-full [&_svg]:max-w-[720px]"
-                dangerouslySetInnerHTML={{ __html: japanMapSvg }}
                 ref={mapRef}
               />
               {tooltip?.visible ? (
