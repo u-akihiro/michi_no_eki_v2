@@ -393,6 +393,10 @@ export const UpdateCheckinRequestSchema = z
   })
   .refine((value) => value.visitedAt !== undefined || value.memo !== undefined)
 
+export const PinPhotoRequestSchema = z.object({
+  isPin: z.boolean(),
+})
+
 export const VisitSummarySchema = z.object({
   stationId: z.uuid(),
   visitCount: z.number().int().nonnegative(),
@@ -435,6 +439,7 @@ export type Station = z.infer<typeof StationSchema>
 export type Checkin = z.infer<typeof CheckinSchema>
 export type CreateCheckinRequest = z.infer<typeof CreateCheckinRequestSchema>
 export type UpdateCheckinRequest = z.infer<typeof UpdateCheckinRequestSchema>
+export type PinPhotoRequest = z.infer<typeof PinPhotoRequestSchema>
 export type VisitSummary = z.infer<typeof VisitSummarySchema>
 export type Stats = z.infer<typeof StatsSchema>
 export type RecentCheckin = z.infer<typeof RecentCheckinSchema>
