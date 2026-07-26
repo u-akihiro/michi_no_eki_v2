@@ -172,4 +172,4 @@ Cloudflare本番デプロイ（自動）
 
 ## 結果
 
-（後から追記）
+- **プレビュー環境は廃止（ADR-0012 で改訂）**: 本ADRの「プレビュー環境」節・全体フロー図の「Cloudflare Preview Deploy → QA on Preview URL」・理由の「Preview Deployments が標準提供されるため PR ごとの動作確認が容易」は撤回する。Preview URL では Google OAuth が動作せず（リダイレクトURIが本番ドメイン固定）、認証を伴う確認が成立しないため。以降、PR検証は GitHub Actions（typecheck / lint / format / build）＋ローカル（`wrangler dev` + 擬似セッション）に集約する。詳細は ADR-0012 を参照。

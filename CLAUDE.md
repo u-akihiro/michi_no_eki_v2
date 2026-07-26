@@ -110,24 +110,24 @@ pnpm build   # 全体ビルド
 ## PR前フロー
 
 ```
-実装(Codex) → Claudeレビュー(git diff) → [必要なら code-review-expert] → Push → PR作成
-                     ↑                                                                ↓
-                 指摘あれば修正                                        Cloudflare Preview 自動デプロイ
-                                                                                       ↓
-                                                                             QA(Playwright on Preview URL)
-                                                                                       ↓
-                                                                             QA結果をPRコメントに投稿
+実装(Codex) → Claudeレビュー(git diff) → [必要なら code-review-expert] → ローカル確認 → Push → PR作成
+                     ↑                                                                              ↓
+                 指摘あれば修正                                                     CI(GitHub Actions: typecheck/lint/format/build)
 ```
+
+- Cloudflare の Preview（非本番ブランチ）デプロイは**廃止**した（ADR-0012）。Preview URL では Google OAuth が動かず認証確認が成立しないため。
+- 認証を伴う動作確認は**ローカル**（`wrangler dev` + `apps/api dev:session` の擬似セッション）で行う。
+- PR の自動検証は **GitHub Actions（typecheck / lint / format / build）** に集約。
 
 指摘・問題があれば修正 → 前段からやり直し。全てクリアしたらマージ。
 
 ## QA運用
 
 - テストコード: `apps/web/e2e/` に配置
-- ローカル実行: Wrangler dev + Vite dev 起動状態で `pnpm --filter web e2e`
-- CI実行: GitHub Actions が PR時に自動実行
+- 実行環境: **ローカルのみ**（Wrangler dev + Vite dev 起動状態で `pnpm --filter web e2e`）。Preview 廃止（ADR-0012）に伴い、Preview URL に対する QA は行わない。
+- CI実行: GitHub Actions が PR時に typecheck / lint / format / build を自動実行（E2E は現状 CI では未実行）
 - QAシナリオ管理: `docs/qa-scenarios.md`
-- 認証: Google OAuthは `storageState` 方式（自動ログイン不可）
+- 認証: Google OAuthは `storageState` 方式（自動ログイン不可）。ローカルの認証後画面確認は下記の擬似セッションを使う。
 
 ### ローカルでの擬似ログイン（dev 専用）
 
@@ -142,7 +142,7 @@ pnpm --filter api dev:session:clear  # 後始末（記録/セッション/ユー
 
 ## デプロイ
 
-- **Preview**: PRごとにCloudflareが自動発行（Pages/Workers両方）
+- **Preview**: **廃止**（ADR-0012）。Cloudflare Workers Builds の非本番ブランチビルドは無効化し、`main` のみビルド/デプロイする。
 - **本番**: `main` へのマージで自動デプロイ
 - ロールバック: Cloudflareダッシュボード or `wrangler rollback`
 
