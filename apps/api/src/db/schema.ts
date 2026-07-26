@@ -64,3 +64,29 @@ export const checkins = sqliteTable(
     index('checkins_user_visited_at_idx').on(table.userId, table.visitedAt),
   ],
 )
+
+export const photos = sqliteTable(
+  'photos',
+  {
+    id: text('id').primaryKey(),
+    checkinId: text('checkin_id')
+      .notNull()
+      .references(() => checkins.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    stationId: text('station_id')
+      .notNull()
+      .references(() => stations.id),
+    r2Key: text('r2_key').notNull().unique(),
+    contentType: text('content_type').notNull(),
+    visibility: text('visibility').notNull().default('private'),
+    isPinPhoto: integer('is_pin_photo').notNull().default(0),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    index('photos_checkin_id_idx').on(table.checkinId),
+    index('photos_user_station_idx').on(table.userId, table.stationId),
+  ],
+)

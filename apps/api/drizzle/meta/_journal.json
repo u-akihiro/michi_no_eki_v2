@@ -29,6 +29,13 @@
       "when": 1784886378539,
       "tag": "0003_flaky_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785059367075,
+      "tag": "0004_oval_cloak",
+      "breakpoints": true
     }
   ]
 }
