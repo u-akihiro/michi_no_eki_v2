@@ -299,7 +299,7 @@ function OverviewTab({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="grid gap-4 sm:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="訪問した道の駅"
           suffix="駅"
@@ -314,6 +314,11 @@ function OverviewTab({
           label="訪問した都道府県"
           suffix="/47"
           value={data.stats.visitedPrefectureCount}
+        />
+        <StatCard
+          label="アップロードした写真"
+          suffix="枚"
+          value={data.stats.photoCount}
         />
       </section>
 

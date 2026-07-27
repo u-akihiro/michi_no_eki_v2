@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 
 import type {
   Checkin,
+  Photo,
   Station,
   UpdateCheckinRequest,
 } from '@michi-no-eki/shared'
@@ -11,6 +12,12 @@ import { Button } from './ui/button'
 
 type CheckinRecordModalMode = 'create' | 'edit'
 
+type PendingPhoto = {
+  id: string
+  file: File
+  previewUrl: string
+}
+
 type CheckinRecordModalProps = {
   checkin: Checkin
   isDismissDisabled?: boolean
@@ -18,9 +25,13 @@ type CheckinRecordModalProps = {
   mode: CheckinRecordModalMode
   onClose: () => void
   onDeleteRequest?: () => void
-  onSave: (request: UpdateCheckinRequest) => void
+  onPhotosChanged?: () => Promise<void> | void
+  onSave: (request: UpdateCheckinRequest) => Promise<void>
   station: Station
 }
+
+const maxPhotoBytes = 10 * 1024 * 1024
+const acceptedPhotoTypes = new Set(['image/jpeg', 'image/png'])
 
 function padDatePart(value: number) {
   return String(value).padStart(2, '0')
@@ -57,6 +68,44 @@ function parseDateTimeLocal(value: string) {
   return new Date(year, month - 1, day, hours, minutes).getTime()
 }
 
+function validatePhotoFile(file: File) {
+  if (!acceptedPhotoTypes.has(file.type)) {
+    return 'JPEG/PNG の写真だけ選択できます'
+  }
+
+  if (file.size <= 0 || file.size > maxPhotoBytes) {
+    return '写真は1枚10MB以下にしてください'
+  }
+
+  return null
+}
+
+async function fetchCheckinPhotos(checkinId: string, signal?: AbortSignal) {
+  const response = await fetch(`/api/checkins/${checkinId}/photos`, { signal })
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+
+  return (await response.json()) as Photo[]
+}
+
+async function uploadCheckinPhoto(checkinId: string, file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(`/api/checkins/${checkinId}/photos`, {
+    body: formData,
+    method: 'POST',
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+
+  return (await response.json()) as Photo
+}
+
 export function CheckinRecordModal({
   checkin,
   isDismissDisabled = false,
@@ -64,21 +113,71 @@ export function CheckinRecordModal({
   mode,
   onClose,
   onDeleteRequest,
+  onPhotosChanged,
   onSave,
   station,
 }: CheckinRecordModalProps) {
   const visitedAtInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [visitedAt, setVisitedAt] = useState(() =>
     formatDateTimeLocal(checkin.visitedAt),
   )
   const [memo, setMemo] = useState(checkin.memo ?? '')
   const [formError, setFormError] = useState<string | null>(null)
+  const [photos, setPhotos] = useState<Photo[]>([])
+  const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([])
+  const pendingPhotosRef = useRef<PendingPhoto[]>([])
+  const [isPhotosLoading, setIsPhotosLoading] = useState(mode === 'edit')
+  const [isPhotoBusy, setIsPhotoBusy] = useState(false)
+  const isBusy = isSaving || isPhotoBusy
 
   useEffect(() => {
     setVisitedAt(formatDateTimeLocal(checkin.visitedAt))
     setMemo(checkin.memo ?? '')
     setFormError(null)
-  }, [checkin])
+    setPhotos([])
+    setIsPhotosLoading(mode === 'edit')
+  }, [checkin, mode])
+
+  useEffect(() => {
+    if (mode !== 'edit') {
+      return
+    }
+
+    const controller = new AbortController()
+    setIsPhotosLoading(true)
+
+    void fetchCheckinPhotos(checkin.id, controller.signal)
+      .then((loadedPhotos) => setPhotos(loadedPhotos))
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+
+        setFormError('写真を読み込めませんでした')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsPhotosLoading(false)
+        }
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [checkin.id, mode])
+
+  useEffect(() => {
+    pendingPhotosRef.current = pendingPhotos
+  }, [pendingPhotos])
+
+  useEffect(() => {
+    return () => {
+      for (const pendingPhoto of pendingPhotosRef.current) {
+        URL.revokeObjectURL(pendingPhoto.previewUrl)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     visitedAtInputRef.current?.focus()
@@ -95,7 +194,7 @@ export function CheckinRecordModal({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !isSaving && !isDismissDisabled) {
+      if (event.key === 'Escape' && !isBusy && !isDismissDisabled) {
         onClose()
       }
     }
@@ -105,10 +204,14 @@ export function CheckinRecordModal({
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isDismissDisabled, isSaving, onClose])
+  }, [isBusy, isDismissDisabled, onClose])
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    if (isBusy) {
+      return
+    }
 
     const parsedVisitedAt = parseDateTimeLocal(visitedAt)
 
@@ -118,9 +221,161 @@ export function CheckinRecordModal({
     }
 
     setFormError(null)
-    onSave({
-      memo: memo.trim().length === 0 ? null : memo,
-      visitedAt: parsedVisitedAt,
+    setIsPhotoBusy(true)
+
+    try {
+      await onSave({
+        memo: memo.trim().length === 0 ? null : memo,
+        visitedAt: parsedVisitedAt,
+      })
+
+      if (mode === 'create' && pendingPhotos.length > 0) {
+        for (const pendingPhoto of pendingPhotos) {
+          await uploadCheckinPhoto(checkin.id, pendingPhoto.file)
+          URL.revokeObjectURL(pendingPhoto.previewUrl)
+        }
+
+        setPendingPhotos([])
+        await onPhotosChanged?.()
+      }
+
+      onClose()
+    } catch {
+      setFormError('保存できませんでした。時間をおいて再度お試しください')
+    } finally {
+      setIsPhotoBusy(false)
+    }
+  }
+
+  async function handleFilesSelected(event: ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = Array.from(event.target.files ?? [])
+    event.target.value = ''
+
+    if (selectedFiles.length === 0 || isBusy) {
+      return
+    }
+
+    const validationError = selectedFiles
+      .map((file) => validatePhotoFile(file))
+      .find((error) => error !== null)
+
+    if (validationError !== undefined && validationError !== null) {
+      setFormError(validationError)
+      return
+    }
+
+    setFormError(null)
+
+    if (mode === 'create') {
+      setPendingPhotos((current) => [
+        ...current,
+        ...selectedFiles.map((file) => ({
+          file,
+          id: crypto.randomUUID(),
+          previewUrl: URL.createObjectURL(file),
+        })),
+      ])
+      return
+    }
+
+    setIsPhotoBusy(true)
+
+    try {
+      const uploadedPhotos: Photo[] = []
+
+      for (const file of selectedFiles) {
+        uploadedPhotos.push(await uploadCheckinPhoto(checkin.id, file))
+      }
+
+      setPhotos((current) => [...current, ...uploadedPhotos])
+      await onPhotosChanged?.()
+    } catch {
+      setFormError('写真をアップロードできませんでした')
+    } finally {
+      setIsPhotoBusy(false)
+    }
+  }
+
+  async function handlePin(photo: Photo, isPin: boolean) {
+    if (isBusy) {
+      return
+    }
+
+    setIsPhotoBusy(true)
+    setFormError(null)
+
+    try {
+      const response = await fetch(`/api/photos/${photo.id}/pin`, {
+        body: JSON.stringify({ isPin }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        method: 'PUT',
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const updatedPhoto = (await response.json()) as Photo
+      setPhotos((current) =>
+        current.map((currentPhoto) => {
+          if (currentPhoto.id === updatedPhoto.id) {
+            return updatedPhoto
+          }
+
+          if (isPin && currentPhoto.stationId === updatedPhoto.stationId) {
+            return { ...currentPhoto, isPinPhoto: 0 }
+          }
+
+          return currentPhoto
+        }),
+      )
+      await onPhotosChanged?.()
+    } catch {
+      setFormError('ピン写真を更新できませんでした')
+    } finally {
+      setIsPhotoBusy(false)
+    }
+  }
+
+  async function handleDeletePhoto(photo: Photo) {
+    if (isBusy) {
+      return
+    }
+
+    setIsPhotoBusy(true)
+    setFormError(null)
+
+    try {
+      const response = await fetch(`/api/photos/${photo.id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      setPhotos((current) =>
+        current.filter((currentPhoto) => currentPhoto.id !== photo.id),
+      )
+      await onPhotosChanged?.()
+    } catch {
+      setFormError('写真を削除できませんでした')
+    } finally {
+      setIsPhotoBusy(false)
+    }
+  }
+
+  function removePendingPhoto(photoId: string) {
+    setPendingPhotos((current) => {
+      const removedPhoto = current.find((photo) => photo.id === photoId)
+
+      if (removedPhoto !== undefined) {
+        URL.revokeObjectURL(removedPhoto.previewUrl)
+      }
+
+      return current.filter((photo) => photo.id !== photoId)
     })
   }
 
@@ -129,7 +384,7 @@ export function CheckinRecordModal({
       <button
         aria-label="訪問記録モーダルを閉じる"
         className="absolute inset-0 bg-[oklch(0.3_0.04_250_/_0.45)]"
-        disabled={isSaving || isDismissDisabled}
+        disabled={isBusy || isDismissDisabled}
         onClick={onClose}
         type="button"
       />
@@ -196,20 +451,50 @@ export function CheckinRecordModal({
             <div className="mb-2 flex items-center justify-between gap-3">
               <h3 className="text-sm font-black text-text">写真</h3>
               <p className="text-xs font-bold text-text-muted">
-                写真の追加は今後対応予定
+                JPEG/PNG・1枚10MBまで
               </p>
             </div>
-            <div className="grid grid-cols-4 gap-2">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div
-                  aria-disabled="true"
-                  className="grid aspect-square place-items-center rounded-lg border border-dashed border-border bg-background text-lg font-black text-text-subtle"
-                  key={index}
-                >
-                  +
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {isPhotosLoading ? (
+                <div className="col-span-full rounded-lg bg-background px-3 py-4 text-sm font-bold text-text-muted">
+                  写真を読み込み中...
                 </div>
+              ) : null}
+              {photos.map((photo) => (
+                <PhotoTile
+                  isBusy={isBusy}
+                  key={photo.id}
+                  onDelete={() => void handleDeletePhoto(photo)}
+                  onPin={() => void handlePin(photo, photo.isPinPhoto !== 1)}
+                  photo={photo}
+                />
               ))}
+              {pendingPhotos.map((photo) => (
+                <PendingPhotoTile
+                  isBusy={isBusy}
+                  key={photo.id}
+                  onRemove={() => removePendingPhoto(photo.id)}
+                  photo={photo}
+                />
+              ))}
+              <button
+                aria-label="写真を追加"
+                className="grid aspect-square place-items-center rounded-lg border border-dashed border-border bg-background text-2xl font-black text-primary transition-colors hover:border-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isBusy}
+                onClick={() => fileInputRef.current?.click()}
+                type="button"
+              >
+                +
+              </button>
             </div>
+            <input
+              accept="image/jpeg,image/png"
+              className="sr-only"
+              multiple
+              onChange={(event) => void handleFilesSelected(event)}
+              ref={fileInputRef}
+              type="file"
+            />
           </section>
 
           {formError !== null && (
@@ -223,7 +508,7 @@ export function CheckinRecordModal({
           {mode === 'edit' && onDeleteRequest !== undefined && (
             <button
               className="text-left text-sm font-black text-danger hover:underline disabled:opacity-50 sm:mr-auto"
-              disabled={isSaving}
+              disabled={isBusy}
               onClick={onDeleteRequest}
               type="button"
             >
@@ -232,23 +517,102 @@ export function CheckinRecordModal({
           )}
           <div className="flex flex-col-reverse gap-2 sm:ml-auto sm:flex-row">
             <Button
-              disabled={isSaving}
+              disabled={isBusy}
               onClick={onClose}
               type="button"
               variant="outline"
             >
               {mode === 'create' ? 'あとで記録する' : 'キャンセル'}
             </Button>
-            <Button disabled={isSaving} type="submit">
-              {isSaving
-                ? '保存中...'
-                : mode === 'create'
-                  ? '記録を保存'
-                  : '保存'}
+            <Button disabled={isBusy} type="submit">
+              {isBusy ? '保存中...' : mode === 'create' ? '記録を保存' : '保存'}
             </Button>
           </div>
         </div>
       </form>
+    </div>
+  )
+}
+
+function PhotoTile({
+  isBusy,
+  onDelete,
+  onPin,
+  photo,
+}: {
+  isBusy: boolean
+  onDelete: () => void
+  onPin: () => void
+  photo: Photo
+}) {
+  const isPinned = photo.isPinPhoto === 1
+
+  return (
+    <div
+      className={`group relative aspect-square overflow-hidden rounded-lg border bg-background ${
+        isPinned ? 'border-2 border-primary' : 'border-border'
+      }`}
+    >
+      <img
+        alt="訪問記録の写真"
+        className="h-full w-full object-cover"
+        src={`/api/photos/${photo.id}`}
+      />
+      {isPinned ? (
+        <span className="absolute left-1 top-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-black text-white">
+          ✓ピンに表示中
+        </span>
+      ) : null}
+      <div className="absolute inset-x-1 bottom-1 flex gap-1">
+        <button
+          className="min-w-0 flex-1 rounded-md bg-white/95 px-2 py-1 text-[11px] font-black text-primary shadow disabled:opacity-50"
+          disabled={isBusy}
+          onClick={onPin}
+          type="button"
+        >
+          {isPinned ? 'ピン解除' : 'ピンに設定'}
+        </button>
+        <button
+          aria-label="写真を削除"
+          className="rounded-md bg-white/95 px-2 py-1 text-[11px] font-black text-danger shadow disabled:opacity-50"
+          disabled={isBusy}
+          onClick={onDelete}
+          type="button"
+        >
+          削除
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PendingPhotoTile({
+  isBusy,
+  onRemove,
+  photo,
+}: {
+  isBusy: boolean
+  onRemove: () => void
+  photo: PendingPhoto
+}) {
+  return (
+    <div className="relative aspect-square overflow-hidden rounded-lg border border-border bg-background">
+      <img
+        alt="追加予定の写真"
+        className="h-full w-full object-cover"
+        src={photo.previewUrl}
+      />
+      <span className="absolute left-1 top-1 rounded-full bg-slate-900/80 px-2 py-0.5 text-[11px] font-black text-white">
+        保存時に追加
+      </span>
+      <button
+        className="absolute bottom-1 right-1 rounded-md bg-white/95 px-2 py-1 text-[11px] font-black text-danger shadow disabled:opacity-50"
+        disabled={isBusy}
+        onClick={onRemove}
+        type="button"
+      >
+        取消
+      </button>
     </div>
   )
 }

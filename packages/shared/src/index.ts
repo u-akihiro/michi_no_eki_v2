@@ -397,6 +397,24 @@ export const PinPhotoRequestSchema = z.object({
   isPin: z.boolean(),
 })
 
+export const PhotoSchema = z.object({
+  id: z.uuid(),
+  checkinId: z.uuid(),
+  userId: z.uuid(),
+  stationId: z.uuid(),
+  r2Key: z.string().min(1),
+  contentType: z.string().min(1),
+  visibility: z.string().min(1),
+  isPinPhoto: z.number().int().min(0).max(1),
+  sortOrder: z.number().int().nonnegative(),
+  createdAt: z.number().int().nonnegative(),
+})
+
+export const PinPhotoSummarySchema = z.object({
+  stationId: z.uuid(),
+  photoId: z.uuid(),
+})
+
 export const VisitSummarySchema = z.object({
   stationId: z.uuid(),
   visitCount: z.number().int().nonnegative(),
@@ -407,6 +425,7 @@ export const StatsSchema = z.object({
   visitedStationCount: z.number().int().nonnegative(),
   checkinCount: z.number().int().nonnegative(),
   visitedPrefectureCount: z.number().int().nonnegative(),
+  photoCount: z.number().int().nonnegative(),
 })
 
 export const RecentCheckinSchema = z.object({
@@ -426,6 +445,8 @@ export const PrefectureProgressSchema = z.object({
 })
 
 export const CheckinsSchema = z.array(CheckinSchema)
+export const PhotosSchema = z.array(PhotoSchema)
+export const PinPhotoSummariesSchema = z.array(PinPhotoSummarySchema)
 export const VisitsSchema = z.array(VisitSummarySchema)
 export const RecentCheckinsSchema = z.array(RecentCheckinSchema)
 export const PrefectureProgressListSchema = z.array(PrefectureProgressSchema)
@@ -440,6 +461,8 @@ export type Checkin = z.infer<typeof CheckinSchema>
 export type CreateCheckinRequest = z.infer<typeof CreateCheckinRequestSchema>
 export type UpdateCheckinRequest = z.infer<typeof UpdateCheckinRequestSchema>
 export type PinPhotoRequest = z.infer<typeof PinPhotoRequestSchema>
+export type Photo = z.infer<typeof PhotoSchema>
+export type PinPhotoSummary = z.infer<typeof PinPhotoSummarySchema>
 export type VisitSummary = z.infer<typeof VisitSummarySchema>
 export type Stats = z.infer<typeof StatsSchema>
 export type RecentCheckin = z.infer<typeof RecentCheckinSchema>
