@@ -338,7 +338,7 @@ app.post('/api/checkins/:checkinId/photos', async (c) => {
     .where(eq(photos.checkinId, checkin.id))
 
   const id = crypto.randomUUID()
-  const r2Key = `checkins/${checkin.id}/${id}`
+  const r2Key = `users/${user.id}/checkins/${checkin.id}/${id}`
   const createdAt = Date.now()
   const storage = createPhotoStorage(c.env.PHOTOS)
 
