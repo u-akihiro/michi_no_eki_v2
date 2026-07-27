@@ -17,6 +17,8 @@ import {
 } from '@michi-no-eki/shared'
 import type {
   Checkin,
+  Photo,
+  PinPhotoSummary,
   Station,
   UpdateCheckinRequest,
   VisitSummary,
@@ -63,6 +65,8 @@ type DeleteCheckinDialogState = {
   checkin: Checkin
   station: Station
 }
+
+type PhotosByCheckinId = Map<string, Photo[]>
 
 function createStationIcon({
   isSelected,
@@ -143,6 +147,88 @@ const SELECTED_VISITED_STATION_ICON = createStationIcon({
   isSelected: true,
   isVisited: true,
 })
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
+function createPhotoStationIcon({
+  isSelected,
+  photoId,
+  stationName,
+}: {
+  isSelected: boolean
+  photoId: string
+  stationName: string
+}) {
+  const imageSize = isSelected ? 52 : 46
+  const width = 128
+  const height = imageSize + 26
+  const ring = isSelected
+    ? `<div style="
+      border: 3px solid oklch(0.74 0.12 250 / 0.72);
+      border-radius: 9999px;
+      height: ${imageSize + 10}px;
+      left: ${(width - imageSize) / 2 - 5}px;
+      position: absolute;
+      top: -5px;
+      width: ${imageSize + 10}px;
+    "></div>`
+    : ''
+
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      height: ${height}px;
+      position: relative;
+      width: ${width}px;
+    ">
+      ${ring}
+      <img
+        alt=""
+        src="/api/photos/${encodeURIComponent(photoId)}"
+        style="
+          background: #ffffff;
+          border: 3px solid #ffffff;
+          border-radius: 9999px;
+          box-shadow: 0 8px 18px rgba(15, 23, 42, 0.28);
+          height: ${imageSize}px;
+          left: ${(width - imageSize) / 2}px;
+          object-fit: cover;
+          position: absolute;
+          top: 0;
+          width: ${imageSize}px;
+        "
+      />
+      <div style="
+        background: rgba(255, 255, 255, 0.96);
+        border: 1px solid rgba(148, 163, 184, 0.6);
+        border-radius: 9999px;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+        color: #0f172a;
+        font: 800 11px/1.2 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        left: 50%;
+        max-width: 118px;
+        overflow: hidden;
+        padding: 3px 8px;
+        position: absolute;
+        text-overflow: ellipsis;
+        top: ${imageSize + 4}px;
+        transform: translateX(-50%);
+        white-space: nowrap;
+      ">${escapeHtml(stationName)}</div>
+    </div>`,
+    iconAnchor: [width / 2, imageSize],
+    iconSize: [width, height],
+    popupAnchor: [0, -imageSize],
+    tooltipAnchor: [0, 4],
+  })
+}
 
 function normalizeSearchText(value: string) {
   return value.trim().toLocaleLowerCase('ja-JP')
@@ -374,12 +460,14 @@ function SearchPanWatcher({
 
 function StationMapMarkers({
   onStationSelect,
+  pinPhotoIdByStationId,
   selectedStationId,
   stations,
   visitsByStationId,
   zoom,
 }: {
   onStationSelect: (station: Station) => void
+  pinPhotoIdByStationId: ReadonlyMap<string, string>
   selectedStationId: string | null
   stations: Station[]
   visitsByStationId: ReadonlyMap<string, VisitSummary>
@@ -451,13 +539,21 @@ function StationMapMarkers({
       {visibleStations.map((station) => {
         const isVisited = visitsByStationId.has(station.id)
         const isSelected = station.id === selectedStationId
-        const icon = isSelected
-          ? isVisited
-            ? SELECTED_VISITED_STATION_ICON
-            : SELECTED_UNVISITED_STATION_ICON
-          : isVisited
-            ? VISITED_STATION_ICON
-            : UNVISITED_STATION_ICON
+        const pinPhotoId = pinPhotoIdByStationId.get(station.id)
+        const icon =
+          pinPhotoId !== undefined
+            ? createPhotoStationIcon({
+                isSelected,
+                photoId: pinPhotoId,
+                stationName: station.name,
+              })
+            : isSelected
+              ? isVisited
+                ? SELECTED_VISITED_STATION_ICON
+                : SELECTED_UNVISITED_STATION_ICON
+              : isVisited
+                ? VISITED_STATION_ICON
+                : UNVISITED_STATION_ICON
 
         return (
           <Marker
@@ -469,16 +565,18 @@ function StationMapMarkers({
             position={[station.latitude, station.longitude]}
             zIndexOffset={isSelected ? 1000 : 0}
           >
-            {zoom >= STATION_LABEL_ZOOM_THRESHOLD && !isZooming && (
-              <Tooltip
-                className="station-label"
-                direction="bottom"
-                offset={[0, 8]}
-                permanent
-              >
-                {station.name}
-              </Tooltip>
-            )}
+            {pinPhotoId === undefined &&
+              zoom >= STATION_LABEL_ZOOM_THRESHOLD &&
+              !isZooming && (
+                <Tooltip
+                  className="station-label"
+                  direction="bottom"
+                  offset={[0, 8]}
+                  permanent
+                >
+                  {station.name}
+                </Tooltip>
+              )}
           </Marker>
         )
       })}
@@ -555,6 +653,12 @@ export function StationMap() {
   const [selectedStationCheckins, setSelectedStationCheckins] = useState<
     Checkin[]
   >([])
+  const [photosByCheckinId, setPhotosByCheckinId] = useState<PhotosByCheckinId>(
+    () => new Map(),
+  )
+  const [pinPhotoIdByStationId, setPinPhotoIdByStationId] = useState<
+    Map<string, string>
+  >(() => new Map())
   const [isCheckinsLoading, setIsCheckinsLoading] = useState(false)
   const [checkinPendingStationIds, setCheckinPendingStationIds] = useState<
     ReadonlySet<string>
@@ -708,10 +812,67 @@ export function StationMap() {
     [isLoggedIn],
   )
 
+  const loadPinPhotos = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!isLoggedIn) {
+        setPinPhotoIdByStationId(new Map())
+        return
+      }
+
+      const response = await fetch('/api/me/pin-photos', { signal })
+
+      if (response.status === 401) {
+        setPinPhotoIdByStationId(new Map())
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const pinPhotos = (await response.json()) as PinPhotoSummary[]
+      setPinPhotoIdByStationId(
+        new Map(pinPhotos.map((photo) => [photo.stationId, photo.photoId])),
+      )
+    },
+    [isLoggedIn],
+  )
+
+  const loadPhotosForCheckins = useCallback(
+    async (checkinsToLoad: Checkin[], signal?: AbortSignal) => {
+      if (!isLoggedIn || checkinsToLoad.length === 0) {
+        setPhotosByCheckinId(new Map())
+        return
+      }
+
+      const entries = await Promise.all(
+        checkinsToLoad.map(async (checkin) => {
+          const response = await fetch(`/api/checkins/${checkin.id}/photos`, {
+            signal,
+          })
+
+          if (response.status === 401 || response.status === 404) {
+            return [checkin.id, [] as Photo[]] as const
+          }
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`)
+          }
+
+          return [checkin.id, (await response.json()) as Photo[]] as const
+        }),
+      )
+
+      setPhotosByCheckinId(new Map(entries))
+    },
+    [isLoggedIn],
+  )
+
   const loadCheckins = useCallback(
     async (stationId: string, signal?: AbortSignal) => {
       if (!isLoggedIn) {
         setSelectedStationCheckins([])
+        setPhotosByCheckinId(new Map())
         return
       }
 
@@ -733,13 +894,14 @@ export function StationMap() {
 
         const checkins = (await response.json()) as Checkin[]
         setSelectedStationCheckins(checkins)
+        await loadPhotosForCheckins(checkins, signal)
       } finally {
         if (signal === undefined || !signal.aborted) {
           setIsCheckinsLoading(false)
         }
       }
     },
-    [isLoggedIn],
+    [isLoggedIn, loadPhotosForCheckins],
   )
 
   useEffect(() => {
@@ -783,13 +945,17 @@ export function StationMap() {
   useEffect(() => {
     if (!isLoggedIn) {
       setVisitsByStationId(new Map())
+      setPinPhotoIdByStationId(new Map())
       setVisitStatus('all')
       return
     }
 
     const controller = new AbortController()
 
-    void loadVisits(controller.signal).catch((error) => {
+    void Promise.all([
+      loadVisits(controller.signal),
+      loadPinPhotos(controller.signal),
+    ]).catch((error) => {
       if (error instanceof DOMException && error.name === 'AbortError') {
         return
       }
@@ -798,11 +964,12 @@ export function StationMap() {
     return () => {
       controller.abort()
     }
-  }, [authUserId, isLoggedIn, loadVisits])
+  }, [authUserId, isLoggedIn, loadPinPhotos, loadVisits])
 
   useEffect(() => {
     if (!isLoggedIn || selectedStationId === null) {
       setSelectedStationCheckins([])
+      setPhotosByCheckinId(new Map())
       setIsCheckinsLoading(false)
       return
     }
@@ -918,7 +1085,6 @@ export function StationMap() {
 
       await response.json()
       await Promise.all([loadVisits(), loadCheckins(station.id)])
-      setCheckinRecordModal(null)
     } finally {
       setSavingCheckinId(null)
     }
@@ -941,7 +1107,11 @@ export function StationMap() {
       }
 
       await response.json()
-      await Promise.all([loadVisits(), loadCheckins(station.id)])
+      await Promise.all([
+        loadVisits(),
+        loadCheckins(station.id),
+        loadPinPhotos(),
+      ])
       setDeleteCheckinDialog(null)
       setCheckinRecordModal(null)
     } finally {
@@ -995,6 +1165,7 @@ export function StationMap() {
           <MapZoomWatcher onZoomChange={setZoom} />
           <StationMapMarkers
             onStationSelect={(station) => setSelectedStationId(station.id)}
+            pinPhotoIdByStationId={pinPhotoIdByStationId}
             selectedStationId={selectedStationId}
             stations={filteredStations}
             visitsByStationId={visitsByStationId}
@@ -1051,6 +1222,7 @@ export function StationMap() {
                 station: selectedStation,
               })
             }
+            photosByCheckinId={photosByCheckinId}
             station={selectedStation}
             visitSummary={visitsByStationId.get(selectedStation.id)}
           />
@@ -1073,8 +1245,14 @@ export function StationMap() {
                 station: checkinRecordModal.station,
               })
             }
+            onPhotosChanged={() =>
+              Promise.all([
+                loadCheckins(checkinRecordModal.station.id),
+                loadPinPhotos(),
+              ]).then(() => undefined)
+            }
             onSave={(request) =>
-              void handleSaveCheckin(
+              handleSaveCheckin(
                 checkinRecordModal.checkin,
                 checkinRecordModal.station,
                 request,
@@ -1100,6 +1278,7 @@ export function StationMap() {
                 deleteCheckinDialog.station,
               )
             }
+            photos={photosByCheckinId.get(deleteCheckinDialog.checkin.id)}
             station={deleteCheckinDialog.station}
           />
         )}

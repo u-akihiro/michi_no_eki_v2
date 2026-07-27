@@ -1,5 +1,10 @@
 import { PREFECTURE_NAME_BY_CODE } from '@michi-no-eki/shared'
-import type { Checkin, Station, VisitSummary } from '@michi-no-eki/shared'
+import type {
+  Checkin,
+  Photo,
+  Station,
+  VisitSummary,
+} from '@michi-no-eki/shared'
 
 import { Button } from './ui/button'
 
@@ -11,6 +16,7 @@ type StationDetailPanelProps = {
   onCheckin: (station: Station) => void
   onClose: () => void
   onEditCheckin: (checkin: Checkin) => void
+  photosByCheckinId: ReadonlyMap<string, Photo[]>
   station: Station
   visitSummary: VisitSummary | undefined
 }
@@ -36,6 +42,7 @@ export function StationDetailPanel({
   onCheckin,
   onClose,
   onEditCheckin,
+  photosByCheckinId,
   station,
   visitSummary,
 }: StationDetailPanelProps) {
@@ -43,6 +50,16 @@ export function StationDetailPanel({
     PREFECTURE_NAME_BY_CODE[station.prefectureCode] ??
     `Prefecture ${station.prefectureCode}`
   const routeUrl = `https://www.google.com/maps/dir/?api=1&destination=${station.latitude},${station.longitude}`
+  const pinnedPhoto =
+    checkins
+      .flatMap((checkin) => photosByCheckinId.get(checkin.id) ?? [])
+      .find((photo) => photo.isPinPhoto === 1) ?? null
+  const latestCheckin = checkins[0]
+  const latestFirstPhoto =
+    latestCheckin === undefined
+      ? undefined
+      : photosByCheckinId.get(latestCheckin.id)?.[0]
+  const mainPhoto = pinnedPhoto ?? latestFirstPhoto ?? null
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[1100] overflow-hidden">
@@ -69,7 +86,15 @@ export function StationDetailPanel({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="h-44 bg-[repeating-linear-gradient(135deg,oklch(0.88_0.045_250)_0_10px,oklch(0.95_0.012_245)_10px_20px)] md:h-56" />
+          {mainPhoto !== null ? (
+            <img
+              alt={`${station.name}の写真`}
+              className="h-44 w-full bg-slate-100 object-cover md:h-56"
+              src={`/api/photos/${mainPhoto.id}`}
+            />
+          ) : (
+            <div className="h-44 bg-[repeating-linear-gradient(135deg,oklch(0.88_0.045_250)_0_10px,oklch(0.95_0.012_245)_10px_20px)] md:h-56" />
+          )}
 
           <div className="space-y-5 px-5 py-5">
             <div>
@@ -142,33 +167,61 @@ export function StationDetailPanel({
                   </p>
                 ) : (
                   <div className="mt-3 space-y-3">
-                    {checkins.map((checkin) => (
-                      <article
-                        className="rounded-lg border border-border bg-white px-4 py-3"
-                        key={checkin.id}
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <time
-                            className="text-sm font-black text-text"
-                            dateTime={new Date(checkin.visitedAt).toISOString()}
-                          >
-                            {formatTimestamp(checkin.visitedAt)}
-                          </time>
-                          <button
-                            className="text-xs font-black text-primary hover:text-primary-hover"
-                            onClick={() => onEditCheckin(checkin)}
-                            type="button"
-                          >
-                            記録を編集 →
-                          </button>
-                        </div>
-                        {checkin.memo !== null && checkin.memo.length > 0 && (
-                          <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-6 text-text-muted">
-                            {checkin.memo}
-                          </p>
-                        )}
-                      </article>
-                    ))}
+                    {checkins.map((checkin) => {
+                      const checkinPhotos =
+                        photosByCheckinId.get(checkin.id) ?? []
+
+                      return (
+                        <article
+                          className="rounded-lg border border-border bg-white px-4 py-3"
+                          key={checkin.id}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <time
+                              className="text-sm font-black text-text"
+                              dateTime={new Date(
+                                checkin.visitedAt,
+                              ).toISOString()}
+                            >
+                              {formatTimestamp(checkin.visitedAt)}
+                            </time>
+                            <button
+                              className="text-xs font-black text-primary hover:text-primary-hover"
+                              onClick={() => onEditCheckin(checkin)}
+                              type="button"
+                            >
+                              記録を編集 →
+                            </button>
+                          </div>
+                          {checkin.memo !== null && checkin.memo.length > 0 && (
+                            <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-6 text-text-muted">
+                              {checkin.memo}
+                            </p>
+                          )}
+                          {checkinPhotos.length > 0 && (
+                            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                              {checkinPhotos.map((photo) => (
+                                <div
+                                  className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-border bg-background"
+                                  key={photo.id}
+                                >
+                                  <img
+                                    alt="訪問記録の写真"
+                                    className="h-full w-full object-cover"
+                                    src={`/api/photos/${photo.id}`}
+                                  />
+                                  {photo.isPinPhoto === 1 ? (
+                                    <span className="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-black text-white">
+                                      ピン
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </article>
+                      )
+                    })}
                   </div>
                 )}
               </section>

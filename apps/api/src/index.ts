@@ -92,20 +92,32 @@ app.get('/api/me/stats', async (c) => {
     return c.json({ error: 'unauthorized' }, 401)
   }
 
-  const [row] = await db
-    .select({
-      visitedStationCount: countDistinct(checkins.stationId),
-      checkinCount: count(checkins.id),
-      visitedPrefectureCount: countDistinct(stations.prefectureCode),
-    })
-    .from(checkins)
-    .innerJoin(stations, eq(checkins.stationId, stations.id))
-    .where(eq(checkins.userId, user.id))
+  const [row, photoCountRow] = await Promise.all([
+    db
+      .select({
+        visitedStationCount: countDistinct(checkins.stationId),
+        checkinCount: count(checkins.id),
+        visitedPrefectureCount: countDistinct(stations.prefectureCode),
+      })
+      .from(checkins)
+      .innerJoin(stations, eq(checkins.stationId, stations.id))
+      .where(eq(checkins.userId, user.id)),
+    db
+      .select({
+        photoCount: count(photos.id),
+      })
+      .from(photos)
+      .where(eq(photos.userId, user.id)),
+  ])
+
+  const [statsRow] = row
+  const [photoStatsRow] = photoCountRow
 
   return c.json({
-    visitedStationCount: row?.visitedStationCount ?? 0,
-    checkinCount: row?.checkinCount ?? 0,
-    visitedPrefectureCount: row?.visitedPrefectureCount ?? 0,
+    visitedStationCount: statsRow?.visitedStationCount ?? 0,
+    checkinCount: statsRow?.checkinCount ?? 0,
+    visitedPrefectureCount: statsRow?.visitedPrefectureCount ?? 0,
+    photoCount: photoStatsRow?.photoCount ?? 0,
   })
 })
 

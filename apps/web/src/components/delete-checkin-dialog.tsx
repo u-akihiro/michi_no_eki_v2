@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-import type { Checkin, Station } from '@michi-no-eki/shared'
+import type { Checkin, Photo, Station } from '@michi-no-eki/shared'
 
 import { Button } from './ui/button'
 
@@ -10,6 +10,7 @@ type DeleteCheckinDialogProps = {
   isDeleting: boolean
   onClose: () => void
   onConfirm: () => void
+  photos?: Photo[]
   station: Station
 }
 
@@ -28,14 +29,52 @@ export function DeleteCheckinDialog({
   isDeleting,
   onClose,
   onConfirm,
+  photos,
   station,
 }: DeleteCheckinDialogProps) {
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
+  const [loadedPhotos, setLoadedPhotos] = useState<Photo[] | null>(
+    photos ?? null,
+  )
   const isLastCheckin = checkinCount <= 1
+  const displayedPhotos = photos ?? loadedPhotos ?? []
+  const hasPinPhoto = displayedPhotos.some((photo) => photo.isPinPhoto === 1)
+  const isPhotoImpactLoading = photos === undefined && loadedPhotos === null
 
   useEffect(() => {
     cancelButtonRef.current?.focus()
   }, [])
+
+  useEffect(() => {
+    if (photos !== undefined) {
+      setLoadedPhotos(photos)
+      return
+    }
+
+    const controller = new AbortController()
+
+    async function loadPhotos() {
+      const response = await fetch(`/api/checkins/${checkin.id}/photos`, {
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        return
+      }
+
+      setLoadedPhotos((await response.json()) as Photo[])
+    }
+
+    void loadPhotos().catch((error) => {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }, [checkin.id, photos])
 
   useEffect(() => {
     const originalOverflow = document.body.style.overflow
@@ -91,9 +130,17 @@ export function DeleteCheckinDialog({
         <ul className="mt-4 space-y-2 text-sm font-medium leading-6 text-text-muted">
           <li>
             {isLastCheckin
-              ? 'この駅は「未訪問」に戻ります'
-              : 'この駅は「訪問済み」のままです'}
+              ? 'この駅は「未訪問」に戻ります。'
+              : 'この駅の「訪問済み」状態は残ります。'}
           </li>
+          {isPhotoImpactLoading ? (
+            <li>写真の削除影響を確認しています...</li>
+          ) : displayedPhotos.length > 0 ? (
+            <li>写真{displayedPhotos.length}枚も削除されます。</li>
+          ) : null}
+          {hasPinPhoto ? (
+            <li>ピン写真を含むため、マップのピンは通常表示に戻ります。</li>
+          ) : null}
         </ul>
         <p className="mt-4 text-sm font-black text-danger">
           この操作は取り消せません。
