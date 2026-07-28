@@ -1,10 +1,17 @@
 import { Hono } from 'hono'
 import {
   CreateCheckinRequestSchema,
+  HOKKAIDO_AREA_CODES,
+  UserPhotoSortSchema,
+  getStationAreaCode,
   PinPhotoRequestSchema,
   UpdateCheckinRequestSchema,
 } from '@michi-no-eki/shared'
-import type { Station } from '@michi-no-eki/shared'
+import type {
+  PhotoListItem,
+  Station,
+  UserPhotoSort,
+} from '@michi-no-eki/shared'
 import { and, count, countDistinct, desc, eq, max, sql } from 'drizzle-orm'
 import type { Context } from 'hono'
 import {
@@ -23,12 +30,38 @@ const app = new Hono<{ Bindings: Env }>()
 const invalidJson = Symbol('invalidJson')
 const recentCheckinsLimit = 50
 const maxPhotoBytes = 10 * 1024 * 1024
-const privatePhotoCacheControl = 'private, no-store'
+const privatePhotoCacheControl = 'private, max-age=31536000, immutable'
 const publicPhotoCacheControl = 'public, max-age=31536000, immutable'
 const prefectureCodes = Array.from({ length: 47 }, (_, index) => index + 1)
+const photoAreaCodes = new Set([
+  ...prefectureCodes.filter((code) => code !== 1),
+  ...Object.values(HOKKAIDO_AREA_CODES),
+])
 
 type AppContext = Context<{ Bindings: Env }>
 type Db = ReturnType<typeof createDb>
+type UserPhotoRow = {
+  photoId: string
+  checkinId: string
+  stationId: string
+  stationName: string
+  sourceStationId: number
+  prefectureCode: number
+  address: string
+  homepageUrl: string | null
+  latitude: number | null
+  longitude: number | null
+  visitedAt: number
+  memo: string | null
+  isPinPhoto: number
+  sortOrder: number
+}
+
+type UserCheckinRow = {
+  id: string
+  stationId: string
+  visitedAt: number
+}
 
 app.use('/api/*', csrfProtection())
 app.use('/auth/logout', csrfProtection())
@@ -144,6 +177,39 @@ app.get('/api/me/checkins', async (c) => {
     .limit(recentCheckinsLimit)
 
   return c.json(rows)
+})
+
+app.get('/api/me/photos', async (c) => {
+  const db = createDb(c.env.DB)
+  const user = await getCurrentUser(c, db)
+  if (!user) {
+    return c.json({ error: 'unauthorized' }, 401)
+  }
+
+  const sort = parseUserPhotoSort(c.req.query('sort'))
+  const pinnedOnly = c.req.query('pinnedOnly') === 'true'
+  const areaCodes = parseAreaCodes(c.req.query('areaCodes'))
+
+  const [photoRows, checkinRows] = await Promise.all([
+    selectUserPhotoRows(db, user.id),
+    selectUserCheckinRows(db, user.id),
+  ])
+  const photoRowById = photoRowsById(photoRows)
+
+  const items = buildPhotoListItems(photoRows, checkinRows)
+    .filter((item) => !pinnedOnly || item.isPinPhoto === 1)
+    .filter((item) => {
+      if (areaCodes.size === 0) {
+        return true
+      }
+
+      const row = photoRowById.get(item.photoId)
+      return row === undefined ? false : areaCodes.has(getPhotoAreaCode(row))
+    })
+
+  items.sort(comparePhotoListItems(sort, photoRowById))
+
+  return c.json(items)
 })
 
 app.get('/api/me/prefecture-progress', async (c) => {
@@ -319,6 +385,30 @@ app.get('/api/stations/:stationId/checkins', async (c) => {
     .orderBy(desc(checkins.visitedAt))
 
   return c.json(rows)
+})
+
+app.get('/api/stations/:stationId/photos', async (c) => {
+  const db = createDb(c.env.DB)
+  const user = await getCurrentUser(c, db)
+  if (!user) {
+    return c.json({ error: 'unauthorized' }, 401)
+  }
+
+  const stationId = c.req.param('stationId')
+  const stationExists = await findStation(db, stationId)
+  if (!stationExists) {
+    return c.json({ error: 'station not found' }, 404)
+  }
+
+  const [photoRows, checkinRows] = await Promise.all([
+    selectUserPhotoRows(db, user.id, stationId),
+    selectUserCheckinRows(db, user.id, stationId),
+  ])
+
+  const items = buildPhotoListItems(photoRows, checkinRows)
+  items.sort(compareStationPhotoListItems(photoRowsById(photoRows)))
+
+  return c.json({ items, totalCount: items.length })
 })
 
 app.post('/api/checkins/:checkinId/photos', async (c) => {
@@ -615,6 +705,188 @@ const readJsonBody = async (c: AppContext) => {
   } catch {
     return invalidJson
   }
+}
+
+const parseUserPhotoSort = (value: string | undefined): UserPhotoSort => {
+  const parsed = UserPhotoSortSchema.safeParse(value)
+  return parsed.success ? parsed.data : 'capturedAt'
+}
+
+const parseAreaCodes = (value: string | undefined) => {
+  if (value === undefined || value.trim() === '') {
+    return new Set<number>()
+  }
+
+  return new Set(
+    value
+      .split(',')
+      .map((item) => Number(item.trim()))
+      .filter((item) => Number.isInteger(item) && photoAreaCodes.has(item)),
+  )
+}
+
+const selectUserPhotoRows = async (
+  db: Db,
+  userId: string,
+  stationId?: string,
+): Promise<UserPhotoRow[]> => {
+  const where = stationId
+    ? and(eq(photos.userId, userId), eq(photos.stationId, stationId))
+    : eq(photos.userId, userId)
+
+  return db
+    .select({
+      photoId: photos.id,
+      checkinId: photos.checkinId,
+      stationId: photos.stationId,
+      stationName: stations.name,
+      sourceStationId: stations.sourceStationId,
+      prefectureCode: stations.prefectureCode,
+      address: stations.address,
+      homepageUrl: stations.homepageUrl,
+      latitude: stations.latitude,
+      longitude: stations.longitude,
+      visitedAt: checkins.visitedAt,
+      memo: checkins.memo,
+      isPinPhoto: photos.isPinPhoto,
+      sortOrder: photos.sortOrder,
+    })
+    .from(photos)
+    .innerJoin(checkins, eq(photos.checkinId, checkins.id))
+    .innerJoin(stations, eq(photos.stationId, stations.id))
+    .where(where)
+}
+
+const selectUserCheckinRows = async (
+  db: Db,
+  userId: string,
+  stationId?: string,
+): Promise<UserCheckinRow[]> => {
+  const where = stationId
+    ? and(eq(checkins.userId, userId), eq(checkins.stationId, stationId))
+    : eq(checkins.userId, userId)
+
+  return db
+    .select({
+      id: checkins.id,
+      stationId: checkins.stationId,
+      visitedAt: checkins.visitedAt,
+    })
+    .from(checkins)
+    .where(where)
+}
+
+const buildPhotoListItems = (
+  photoRows: UserPhotoRow[],
+  checkinRows: UserCheckinRow[],
+): PhotoListItem[] => {
+  const checkinPhotoCounts = new Map<string, number>()
+  for (const row of photoRows) {
+    checkinPhotoCounts.set(
+      row.checkinId,
+      (checkinPhotoCounts.get(row.checkinId) ?? 0) + 1,
+    )
+  }
+
+  const visitOrdinals = buildVisitOrdinals(checkinRows)
+
+  return photoRows.map((row) => ({
+    photoId: row.photoId,
+    checkinId: row.checkinId,
+    stationId: row.stationId,
+    stationName: row.stationName,
+    prefectureCode: row.prefectureCode,
+    visitedAt: row.visitedAt,
+    memo: row.memo,
+    isPinPhoto: row.isPinPhoto,
+    checkinPhotoCount: checkinPhotoCounts.get(row.checkinId) ?? 0,
+    visitOrdinal: visitOrdinals.get(row.checkinId) ?? 1,
+  }))
+}
+
+const buildVisitOrdinals = (checkinRows: UserCheckinRow[]) => {
+  const checkinsByStation = new Map<string, UserCheckinRow[]>()
+  for (const row of checkinRows) {
+    const rows = checkinsByStation.get(row.stationId) ?? []
+    rows.push(row)
+    checkinsByStation.set(row.stationId, rows)
+  }
+
+  const visitOrdinals = new Map<string, number>()
+  for (const rows of checkinsByStation.values()) {
+    rows
+      .sort(
+        (left, right) =>
+          left.visitedAt - right.visitedAt || left.id.localeCompare(right.id),
+      )
+      .forEach((row, index) => {
+        visitOrdinals.set(row.id, index + 1)
+      })
+  }
+
+  return visitOrdinals
+}
+
+const comparePhotoListItems =
+  (sort: UserPhotoSort, rowById: Map<string, UserPhotoRow>) =>
+  (left: PhotoListItem, right: PhotoListItem) => {
+    const stableCompare = comparePhotoTieBreakers(rowById, left, right)
+
+    if (sort === 'station') {
+      return (
+        left.stationName.localeCompare(right.stationName, 'ja') ||
+        right.visitedAt - left.visitedAt ||
+        stableCompare
+      )
+    }
+
+    if (sort === 'prefecture') {
+      return (
+        left.prefectureCode - right.prefectureCode ||
+        right.visitedAt - left.visitedAt ||
+        stableCompare
+      )
+    }
+
+    return right.visitedAt - left.visitedAt || stableCompare
+  }
+
+const compareStationPhotoListItems =
+  (rowById: Map<string, UserPhotoRow>) =>
+  (left: PhotoListItem, right: PhotoListItem) =>
+    right.visitedAt - left.visitedAt ||
+    comparePhotoTieBreakers(rowById, left, right)
+
+const comparePhotoTieBreakers = (
+  rowById: Map<string, UserPhotoRow>,
+  left: PhotoListItem,
+  right: PhotoListItem,
+) => {
+  const leftRow = rowById.get(left.photoId)
+  const rightRow = rowById.get(right.photoId)
+
+  return (
+    (leftRow?.sortOrder ?? 0) - (rightRow?.sortOrder ?? 0) ||
+    left.photoId.localeCompare(right.photoId)
+  )
+}
+
+const photoRowsById = (photoRows: UserPhotoRow[]) =>
+  new Map(photoRows.map((row) => [row.photoId, row]))
+
+const getPhotoAreaCode = (row: UserPhotoRow) => {
+  const station: Station = {
+    id: row.stationId,
+    sourceStationId: row.sourceStationId,
+    name: row.stationName,
+    prefectureCode: row.prefectureCode,
+    address: row.address,
+    homepageUrl: row.homepageUrl,
+    latitude: row.latitude ?? 0,
+    longitude: row.longitude ?? 0,
+  }
+
+  return getStationAreaCode(station)
 }
 
 const findStation = async (db: Db, stationId: string) => {

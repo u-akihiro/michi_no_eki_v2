@@ -410,6 +410,30 @@ export const PhotoSchema = z.object({
   createdAt: z.number().int().nonnegative(),
 })
 
+export const UserPhotoSortSchema = z.enum([
+  'capturedAt',
+  'station',
+  'prefecture',
+])
+
+export const PhotoListItemSchema = z.object({
+  photoId: z.uuid(),
+  checkinId: z.uuid(),
+  stationId: z.uuid(),
+  stationName: z.string().min(1),
+  prefectureCode: z.number().int().min(1).max(47),
+  visitedAt: z.number().int().nonnegative(),
+  memo: z.string().nullable(),
+  isPinPhoto: z.number().int().min(0).max(1),
+  checkinPhotoCount: z.number().int().nonnegative(),
+  visitOrdinal: z.number().int().positive(),
+})
+
+export const StationPhotosSchema = z.object({
+  items: z.array(PhotoListItemSchema),
+  totalCount: z.number().int().nonnegative(),
+})
+
 export const PinPhotoSummarySchema = z.object({
   stationId: z.uuid(),
   photoId: z.uuid(),
@@ -446,6 +470,7 @@ export const PrefectureProgressSchema = z.object({
 
 export const CheckinsSchema = z.array(CheckinSchema)
 export const PhotosSchema = z.array(PhotoSchema)
+export const PhotoListItemsSchema = z.array(PhotoListItemSchema)
 export const PinPhotoSummariesSchema = z.array(PinPhotoSummarySchema)
 export const VisitsSchema = z.array(VisitSummarySchema)
 export const RecentCheckinsSchema = z.array(RecentCheckinSchema)
@@ -462,6 +487,9 @@ export type CreateCheckinRequest = z.infer<typeof CreateCheckinRequestSchema>
 export type UpdateCheckinRequest = z.infer<typeof UpdateCheckinRequestSchema>
 export type PinPhotoRequest = z.infer<typeof PinPhotoRequestSchema>
 export type Photo = z.infer<typeof PhotoSchema>
+export type UserPhotoSort = z.infer<typeof UserPhotoSortSchema>
+export type PhotoListItem = z.infer<typeof PhotoListItemSchema>
+export type StationPhotos = z.infer<typeof StationPhotosSchema>
 export type PinPhotoSummary = z.infer<typeof PinPhotoSummarySchema>
 export type VisitSummary = z.infer<typeof VisitSummarySchema>
 export type Stats = z.infer<typeof StatsSchema>
