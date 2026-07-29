@@ -412,6 +412,13 @@ function MapZoomWatcher({
   const map = useMap()
 
   useMapEvents({
+    // zoomend に加えて moveend も購読する。クラスタタップ等の programmatic な
+    // setView/fitBounds は zoomend が発火しないことがあり、その場合 zoom state が
+    // 更新されずクラスタ→個別ピンの切替が起きない。moveend は移動終了時に確実に
+    // 発火するため取りこぼしを防ぐ（同値の setZoom は React が再レンダーを抑制）。
+    moveend: () => {
+      onZoomChange(map.getZoom())
+    },
     zoomend: () => {
       onZoomChange(map.getZoom())
     },
