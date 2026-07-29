@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 
+import { BottomNav } from './bottom-nav'
 import { Header } from './header'
 
 import { AuthProvider } from '@/contexts/auth-context'
@@ -14,6 +15,7 @@ export function AppShell() {
           <main className="min-h-0 flex-1">
             <Outlet />
           </main>
+          <BottomNav />
         </div>
       </StationSearchProvider>
     </AuthProvider>
