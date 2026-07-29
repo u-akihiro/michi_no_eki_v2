@@ -42,6 +42,7 @@ const INITIAL_ZOOM = 5
 const SEARCH_ZOOM = 12
 const PREFECTURE_CLUSTER_ZOOM_THRESHOLD = 10
 const STATION_LABEL_ZOOM_THRESHOLD = 11
+const COMPACT_VIEWPORT_MEDIA_QUERY = '(max-width: 767px)'
 const CLUSTER_FIT_BOUNDS_PADDING = L.point(32, 32)
 const VIEWPORT_PADDING_RATIO = 0.25
 const GEOLOCATION_TIMEOUT_MS = 6000
@@ -243,6 +244,29 @@ function normalizeSearchText(value: string) {
   return value.trim().toLocaleLowerCase('ja-JP')
 }
 
+function useIsCompactViewport() {
+  const [isCompact, setIsCompact] = useState(
+    () => window.matchMedia(COMPACT_VIEWPORT_MEDIA_QUERY).matches,
+  )
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(COMPACT_VIEWPORT_MEDIA_QUERY)
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsCompact(event.matches)
+    }
+
+    setIsCompact(mediaQuery.matches)
+    mediaQuery.addEventListener('change', handleChange)
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange)
+    }
+  }, [])
+
+  return isCompact
+}
+
 function createPrefectureClusterIcon(count: number) {
   return L.divIcon({
     className: '',
@@ -302,7 +326,11 @@ function createPrefectureClusters(stations: Station[]) {
     .sort((a, b) => a.prefectureCode - b.prefectureCode)
 }
 
-function fitPrefectureStations(map: L.Map, stations: Station[]) {
+function fitPrefectureStations(
+  map: L.Map,
+  stations: Station[],
+  clusterZoomThreshold: number,
+) {
   if (stations.length === 0) {
     return
   }
@@ -310,10 +338,7 @@ function fitPrefectureStations(map: L.Map, stations: Station[]) {
   if (stations.length === 1) {
     const station = stations[0]!
 
-    map.setView(
-      [station.latitude, station.longitude],
-      PREFECTURE_CLUSTER_ZOOM_THRESHOLD,
-    )
+    map.setView([station.latitude, station.longitude], clusterZoomThreshold)
     return
   }
 
@@ -326,8 +351,8 @@ function fitPrefectureStations(map: L.Map, stations: Station[]) {
     CLUSTER_FIT_BOUNDS_PADDING,
   )
 
-  if (fitBoundsZoom < PREFECTURE_CLUSTER_ZOOM_THRESHOLD) {
-    map.setView(bounds.getCenter(), PREFECTURE_CLUSTER_ZOOM_THRESHOLD)
+  if (fitBoundsZoom < clusterZoomThreshold) {
+    map.setView(bounds.getCenter(), clusterZoomThreshold)
     return
   }
 
@@ -516,6 +541,8 @@ function QueryStationWatcher({
 }
 
 function StationMapMarkers({
+  clusterZoomThreshold,
+  labelZoomThreshold,
   onStationSelect,
   pinPhotoIdByStationId,
   selectedStationId,
@@ -523,6 +550,8 @@ function StationMapMarkers({
   visitsByStationId,
   zoom,
 }: {
+  clusterZoomThreshold: number
+  labelZoomThreshold: number
   onStationSelect: (station: Station) => void
   pinPhotoIdByStationId: ReadonlyMap<string, string>
   selectedStationId: string | null
@@ -563,14 +592,18 @@ function StationMapMarkers({
     return icons
   }, [prefectureClusters])
 
-  if (zoom < PREFECTURE_CLUSTER_ZOOM_THRESHOLD) {
+  if (zoom < clusterZoomThreshold) {
     return (
       <>
         {prefectureClusters.map((cluster) => (
           <Marker
             eventHandlers={{
               click: () => {
-                fitPrefectureStations(map, cluster.stations)
+                fitPrefectureStations(
+                  map,
+                  cluster.stations,
+                  clusterZoomThreshold,
+                )
               },
             }}
             icon={
@@ -623,7 +656,7 @@ function StationMapMarkers({
             zIndexOffset={isSelected ? 1000 : 0}
           >
             {pinPhotoId === undefined &&
-              zoom >= STATION_LABEL_ZOOM_THRESHOLD &&
+              zoom >= labelZoomThreshold &&
               !isZooming && (
                 <Tooltip
                   className="station-label"
@@ -765,6 +798,7 @@ function NearbyStationCard({
 export function StationMap() {
   const { authState } = useAuth()
   const { query, submittedQuery } = useStationSearch()
+  const isCompactViewport = useIsCompactViewport()
   const [stations, setStations] = useState<Station[]>([])
   const [visitsByStationId, setVisitsByStationId] = useState<
     Map<string, VisitSummary>
@@ -813,6 +847,12 @@ export function StationMap() {
   const normalizedQuery = normalizeSearchText(query)
   const authUserId = authState.status === 'logged-in' ? authState.user.id : null
   const isLoggedIn = authUserId !== null
+  const clusterZoomThreshold = isCompactViewport
+    ? PREFECTURE_CLUSTER_ZOOM_THRESHOLD - 1
+    : PREFECTURE_CLUSTER_ZOOM_THRESHOLD
+  const labelZoomThreshold = isCompactViewport
+    ? STATION_LABEL_ZOOM_THRESHOLD - 1
+    : STATION_LABEL_ZOOM_THRESHOLD
 
   const selectedStation = useMemo(
     () =>
@@ -1390,6 +1430,8 @@ export function StationMap() {
           />
           <MapZoomWatcher onZoomChange={setZoom} />
           <StationMapMarkers
+            clusterZoomThreshold={clusterZoomThreshold}
+            labelZoomThreshold={labelZoomThreshold}
             onStationSelect={handleStationSelect}
             pinPhotoIdByStationId={pinPhotoIdByStationId}
             selectedStationId={selectedStationId}
