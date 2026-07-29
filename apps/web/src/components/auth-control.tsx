@@ -34,7 +34,7 @@ export function AuthControl() {
             width={36}
           />
         )}
-      <span className="min-w-0 max-w-40 truncate text-sm font-medium text-text">
+      <span className="hidden min-w-0 max-w-40 truncate text-sm font-medium text-text sm:inline">
         {authState.user.name}
       </span>
       <Button

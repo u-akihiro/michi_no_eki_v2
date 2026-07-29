@@ -17,11 +17,11 @@ export function Header() {
   return (
     <header
       aria-label="アプリヘッダー"
-      className="flex h-[60px] shrink-0 items-center gap-5 border-b border-border bg-white px-5"
+      className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-3 border-b border-border bg-white px-5 py-3 md:h-[60px] md:flex-nowrap md:py-0"
     >
       <NavLink
         aria-label="みちえき マップへ"
-        className="flex shrink-0 items-center gap-3"
+        className="order-1 flex shrink-0 items-center gap-3"
         to="/"
       >
         <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-sm font-black text-white">
@@ -32,7 +32,7 @@ export function Header() {
         </span>
       </NavLink>
 
-      <div className="relative min-w-0 flex-1">
+      <div className="relative order-3 w-full md:order-2 md:min-w-0 md:flex-1">
         <span
           aria-hidden="true"
           className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-base font-bold text-text-muted"
@@ -56,7 +56,7 @@ export function Header() {
 
       <nav
         aria-label="グローバルナビゲーション"
-        className="hidden shrink-0 items-center gap-6 md:flex"
+        className="order-4 hidden shrink-0 items-center gap-6 md:order-3 md:flex"
       >
         <NavLink className={navLinkClassName} end to="/">
           マップ
@@ -66,7 +66,7 @@ export function Header() {
         </NavLink>
       </nav>
 
-      <div className="shrink-0">
+      <div className="order-2 ml-auto shrink-0 md:order-4 md:ml-0">
         <AuthControl />
       </div>
     </header>
