@@ -18,14 +18,17 @@ import {
 import type {
   Checkin,
   Photo,
+  PhotoListItem,
   PinPhotoSummary,
   Station,
+  StationPhotos,
   UpdateCheckinRequest,
   VisitSummary,
 } from '@michi-no-eki/shared'
 
 import { CheckinRecordModal } from './checkin-record-modal'
 import { DeleteCheckinDialog } from './delete-checkin-dialog'
+import { PhotoLightbox } from './photo-lightbox'
 import { StationDetailPanel } from './station-detail-panel'
 import { StationFilter } from './station-filter'
 import type { VisitStatus } from './station-filter'
@@ -67,6 +70,11 @@ type DeleteCheckinDialogState = {
 }
 
 type PhotosByCheckinId = Map<string, Photo[]>
+
+type PhotoLightboxState = {
+  initialPhotoId: string
+  photos: PhotoListItem[]
+}
 
 function createStationIcon({
   isSelected,
@@ -656,6 +664,8 @@ export function StationMap() {
   const [photosByCheckinId, setPhotosByCheckinId] = useState<PhotosByCheckinId>(
     () => new Map(),
   )
+  const [stationPhotos, setStationPhotos] = useState<PhotoListItem[]>([])
+  const [stationPhotoTotal, setStationPhotoTotal] = useState(0)
   const [pinPhotoIdByStationId, setPinPhotoIdByStationId] = useState<
     Map<string, string>
   >(() => new Map())
@@ -679,6 +689,9 @@ export function StationMap() {
   )
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   const [nearestStation, setNearestStation] = useState<NearestStation | null>(
+    null,
+  )
+  const [photoLightbox, setPhotoLightbox] = useState<PhotoLightboxState | null>(
     null,
   )
 
@@ -868,6 +881,35 @@ export function StationMap() {
     [isLoggedIn],
   )
 
+  const loadStationPhotos = useCallback(
+    async (stationId: string, signal?: AbortSignal) => {
+      if (!isLoggedIn) {
+        setStationPhotos([])
+        setStationPhotoTotal(0)
+        return
+      }
+
+      const response = await fetch(`/api/stations/${stationId}/photos`, {
+        signal,
+      })
+
+      if (response.status === 401 || response.status === 404) {
+        setStationPhotos([])
+        setStationPhotoTotal(0)
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const stationPhotoResponse = (await response.json()) as StationPhotos
+      setStationPhotos(stationPhotoResponse.items)
+      setStationPhotoTotal(stationPhotoResponse.totalCount)
+    },
+    [isLoggedIn],
+  )
+
   const loadCheckins = useCallback(
     async (stationId: string, signal?: AbortSignal) => {
       if (!isLoggedIn) {
@@ -986,6 +1028,29 @@ export function StationMap() {
       controller.abort()
     }
   }, [isLoggedIn, loadCheckins, selectedStationId])
+
+  useEffect(() => {
+    if (!isLoggedIn || selectedStationId === null) {
+      setStationPhotos([])
+      setStationPhotoTotal(0)
+      setPhotoLightbox(null)
+      return
+    }
+
+    const controller = new AbortController()
+
+    void loadStationPhotos(selectedStationId, controller.signal).catch(
+      (error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+      },
+    )
+
+    return () => {
+      controller.abort()
+    }
+  }, [isLoggedIn, loadStationPhotos, selectedStationId])
 
   useEffect(() => {
     if (
@@ -1111,12 +1176,49 @@ export function StationMap() {
         loadVisits(),
         loadCheckins(station.id),
         loadPinPhotos(),
+        loadStationPhotos(station.id),
       ])
       setDeleteCheckinDialog(null)
       setCheckinRecordModal(null)
     } finally {
       setDeletingCheckinId(null)
     }
+  }
+
+  function openPhotoLightbox(photoId: string) {
+    if (stationPhotos.length === 0) {
+      return
+    }
+
+    setPhotoLightbox({
+      initialPhotoId: photoId,
+      photos: stationPhotos,
+    })
+  }
+
+  function openAllStationPhotos() {
+    const firstPhoto = stationPhotos[0]
+
+    if (firstPhoto === undefined) {
+      return
+    }
+
+    setPhotoLightbox({
+      initialPhotoId: firstPhoto.photoId,
+      photos: stationPhotos,
+    })
+  }
+
+  async function reloadPhotoStateAfterPinChange() {
+    const stationId = selectedStationId
+
+    await Promise.all([
+      loadPinPhotos(),
+      stationId === null ? Promise.resolve() : loadStationPhotos(stationId),
+      selectedStationCheckins.length === 0
+        ? Promise.resolve()
+        : loadPhotosForCheckins(selectedStationCheckins),
+    ])
   }
 
   const filterPanel = (
@@ -1222,9 +1324,45 @@ export function StationMap() {
                 station: selectedStation,
               })
             }
+            onOpenAllPhotos={openAllStationPhotos}
+            onOpenPhoto={openPhotoLightbox}
             photosByCheckinId={photosByCheckinId}
             station={selectedStation}
+            stationPhotoTotal={stationPhotoTotal}
+            stationPhotos={stationPhotos}
             visitSummary={visitsByStationId.get(selectedStation.id)}
+          />
+        )}
+
+        {photoLightbox !== null && (
+          <PhotoLightbox
+            initialPhotoId={photoLightbox.initialPhotoId}
+            isLoggedIn={isLoggedIn}
+            onClose={() => setPhotoLightbox(null)}
+            onEditCheckin={(checkinId) => {
+              const checkin = selectedStationCheckins.find(
+                (candidate) => candidate.id === checkinId,
+              )
+
+              if (checkin === undefined || selectedStation === null) {
+                return
+              }
+
+              setCheckinRecordModal({
+                checkin,
+                mode: 'edit',
+                station: selectedStation,
+              })
+              setPhotoLightbox(null)
+            }}
+            onOpenStationOnMap={(stationId) => {
+              setSelectedStationId(stationId)
+              setPhotoLightbox(null)
+            }}
+            onPinChanged={() => {
+              void reloadPhotoStateAfterPinChange()
+            }}
+            photos={photoLightbox.photos}
           />
         )}
 
@@ -1249,6 +1387,7 @@ export function StationMap() {
               Promise.all([
                 loadCheckins(checkinRecordModal.station.id),
                 loadPinPhotos(),
+                loadStationPhotos(checkinRecordModal.station.id),
               ]).then(() => undefined)
             }
             onSave={(request) =>

@@ -2,6 +2,7 @@ import { PREFECTURE_NAME_BY_CODE } from '@michi-no-eki/shared'
 import type {
   Checkin,
   Photo,
+  PhotoListItem,
   Station,
   VisitSummary,
 } from '@michi-no-eki/shared'
@@ -16,8 +17,12 @@ type StationDetailPanelProps = {
   onCheckin: (station: Station) => void
   onClose: () => void
   onEditCheckin: (checkin: Checkin) => void
+  onOpenAllPhotos: () => void
+  onOpenPhoto: (photoId: string) => void
   photosByCheckinId: ReadonlyMap<string, Photo[]>
   station: Station
+  stationPhotoTotal: number
+  stationPhotos: PhotoListItem[]
   visitSummary: VisitSummary | undefined
 }
 
@@ -42,8 +47,12 @@ export function StationDetailPanel({
   onCheckin,
   onClose,
   onEditCheckin,
+  onOpenAllPhotos,
+  onOpenPhoto,
   photosByCheckinId,
   station,
+  stationPhotoTotal,
+  stationPhotos,
   visitSummary,
 }: StationDetailPanelProps) {
   const prefectureName =
@@ -153,78 +162,132 @@ export function StationDetailPanel({
             )}
 
             {isLoggedIn && (
-              <section className="border-t border-border pt-5">
-                <h3 className="text-sm font-black text-text">
-                  あなたの訪問記録
-                </h3>
-                {isCheckinsLoading ? (
-                  <p className="mt-3 text-sm font-medium text-text-muted">
-                    訪問記録を読み込み中...
-                  </p>
-                ) : checkins.length === 0 ? (
-                  <p className="mt-3 rounded-lg bg-background px-4 py-3 text-sm font-medium text-text-muted">
-                    まだ訪問記録はありません
-                  </p>
-                ) : (
-                  <div className="mt-3 space-y-3">
-                    {checkins.map((checkin) => {
-                      const checkinPhotos =
-                        photosByCheckinId.get(checkin.id) ?? []
+              <>
+                <section className="border-t border-border pt-5">
+                  <h3 className="text-sm font-black text-text">
+                    あなたの訪問記録
+                  </h3>
+                  {isCheckinsLoading ? (
+                    <p className="mt-3 text-sm font-medium text-text-muted">
+                      訪問記録を読み込み中...
+                    </p>
+                  ) : checkins.length === 0 ? (
+                    <p className="mt-3 rounded-lg bg-background px-4 py-3 text-sm font-medium text-text-muted">
+                      まだ訪問記録はありません
+                    </p>
+                  ) : (
+                    <div className="mt-3 space-y-3">
+                      {checkins.map((checkin) => {
+                        const checkinPhotos =
+                          photosByCheckinId.get(checkin.id) ?? []
 
-                      return (
-                        <article
-                          className="rounded-lg border border-border bg-white px-4 py-3"
-                          key={checkin.id}
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <time
-                              className="text-sm font-black text-text"
-                              dateTime={new Date(
-                                checkin.visitedAt,
-                              ).toISOString()}
-                            >
-                              {formatTimestamp(checkin.visitedAt)}
-                            </time>
-                            <button
-                              className="text-xs font-black text-primary hover:text-primary-hover"
-                              onClick={() => onEditCheckin(checkin)}
-                              type="button"
-                            >
-                              記録を編集 →
-                            </button>
-                          </div>
-                          {checkin.memo !== null && checkin.memo.length > 0 && (
-                            <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-6 text-text-muted">
-                              {checkin.memo}
-                            </p>
-                          )}
-                          {checkinPhotos.length > 0 && (
-                            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                              {checkinPhotos.map((photo) => (
-                                <div
-                                  className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-border bg-background"
-                                  key={photo.id}
-                                >
-                                  <img
-                                    alt="訪問記録の写真"
-                                    className="h-full w-full object-cover"
-                                    src={`/api/photos/${photo.id}`}
-                                  />
-                                  {photo.isPinPhoto === 1 ? (
-                                    <span className="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-black text-white">
-                                      ピン
-                                    </span>
-                                  ) : null}
-                                </div>
-                              ))}
+                        return (
+                          <article
+                            className="rounded-lg border border-border bg-white px-4 py-3"
+                            key={checkin.id}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <time
+                                className="text-sm font-black text-text"
+                                dateTime={new Date(
+                                  checkin.visitedAt,
+                                ).toISOString()}
+                              >
+                                {formatTimestamp(checkin.visitedAt)}
+                              </time>
+                              <button
+                                className="text-xs font-black text-primary hover:text-primary-hover"
+                                onClick={() => onEditCheckin(checkin)}
+                                type="button"
+                              >
+                                記録を編集 →
+                              </button>
                             </div>
-                          )}
-                        </article>
-                      )
-                    })}
-                  </div>
+                            {checkin.memo !== null &&
+                              checkin.memo.length > 0 && (
+                                <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-6 text-text-muted">
+                                  {checkin.memo}
+                                </p>
+                              )}
+                            {checkinPhotos.length > 0 && (
+                              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                                {checkinPhotos.map((photo) => (
+                                  <div
+                                    className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-border bg-background"
+                                    key={photo.id}
+                                  >
+                                    <img
+                                      alt="訪問記録の写真"
+                                      className="h-full w-full object-cover"
+                                      src={`/api/photos/${photo.id}`}
+                                    />
+                                    {photo.isPinPhoto === 1 ? (
+                                      <span className="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-black text-white">
+                                        ピン
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </article>
+                        )
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                {stationPhotoTotal > 0 && (
+                  <section className="border-t border-border pt-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-black text-text">
+                        この駅の写真 {stationPhotoTotal}枚
+                      </h3>
+                      <button
+                        className="text-xs font-black text-primary hover:text-primary-hover"
+                        onClick={onOpenAllPhotos}
+                        type="button"
+                      >
+                        すべて見る →
+                      </button>
+                    </div>
+                    <div className="mt-3 grid grid-cols-4 gap-[7px]">
+                      {stationPhotos.slice(0, 4).map((photo, index) => {
+                        const hiddenCount = stationPhotoTotal - 3
+                        const shouldShowOverlay =
+                          index === 3 && stationPhotoTotal > 4
+
+                        return (
+                          <button
+                            aria-label={`${photo.stationName}の写真を開く`}
+                            className="relative aspect-square overflow-hidden rounded-lg bg-background"
+                            key={photo.photoId}
+                            onClick={() => onOpenPhoto(photo.photoId)}
+                            type="button"
+                          >
+                            <img
+                              alt={`${photo.stationName}の写真`}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                              src={`/api/photos/${photo.photoId}`}
+                            />
+                            {photo.isPinPhoto === 1 && (
+                              <span className="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-black text-white">
+                                ピン
+                              </span>
+                            )}
+                            {shouldShowOverlay && (
+                              <span className="absolute inset-0 grid place-items-center bg-[oklch(0.3_0.04_250_/_0.5)] text-xl font-black text-white">
+                                +{hiddenCount}
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </section>
                 )}
-              </section>
+              </>
             )}
           </div>
         </div>
