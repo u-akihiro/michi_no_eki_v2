@@ -80,7 +80,7 @@ export function StationDetailPanel({
       />
       <aside
         aria-label={`${station.name}の詳細`}
-        className="pointer-events-auto absolute inset-x-0 bottom-0 flex max-h-[82dvh] min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-[0_-16px_48px_oklch(0.2_0.04_250_/_0.28)] md:inset-x-auto md:inset-y-0 md:right-0 md:h-full md:max-h-none md:w-[440px] md:rounded-none md:shadow-[0_12px_48px_oklch(0.2_0.04_250_/_0.24)]"
+        className="pointer-events-auto absolute inset-x-0 bottom-0 flex max-h-[85%] min-h-0 flex-col overflow-hidden rounded-t-2xl bg-white shadow-[0_-16px_48px_oklch(0.2_0.04_250_/_0.28)] md:inset-x-auto md:inset-y-0 md:right-0 md:h-full md:max-h-none md:w-[440px] md:rounded-none md:shadow-[0_12px_48px_oklch(0.2_0.04_250_/_0.24)]"
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <p className="text-xs font-black text-text-muted">道の駅詳細</p>
