@@ -12,6 +12,7 @@ import type { AuthUser } from '@/contexts/auth-context'
 import { useAuth } from '@/contexts/auth-context'
 import { cn } from '@/lib/utils'
 import { PrefectureHeatmap } from '@/components/mypage/prefecture-heatmap'
+import { PhotosTab } from '@/components/mypage/photos-tab'
 
 type MyPageData = {
   stats: Stats
@@ -19,11 +20,12 @@ type MyPageData = {
   prefectureProgress: PrefectureProgress[]
 }
 
-type TabId = 'overview' | 'heatmap' | 'checkins'
+type TabId = 'overview' | 'heatmap' | 'photos' | 'checkins'
 
 const tabs = [
   { id: 'overview', label: '概要' },
   { id: 'heatmap', label: 'ヒートマップ' },
+  { id: 'photos', label: '写真' },
   { id: 'checkins', label: '訪問記録一覧' },
 ] as const satisfies readonly { id: TabId; label: string }[]
 
@@ -179,6 +181,7 @@ export function MyPagePage() {
       {activeTab === 'heatmap' && (
         <PrefectureHeatmap prefectureProgress={data.prefectureProgress} />
       )}
+      {activeTab === 'photos' && <PhotosTab />}
       {activeTab === 'checkins' && <CheckinsTab checkins={data.checkins} />}
     </PageFrame>
   )
@@ -318,6 +321,7 @@ function OverviewTab({
         <StatCard
           label="アップロードした写真"
           suffix="枚"
+          to="?tab=photos"
           value={data.stats.photoCount}
         />
       </section>
@@ -378,19 +382,38 @@ function OverviewTab({
 function StatCard({
   label,
   suffix,
+  to,
   value,
 }: {
   label: string
   suffix: string
+  to?: string
   value: number
 }) {
-  return (
-    <article className="rounded-lg border border-border bg-white p-5 shadow-sm">
+  const content = (
+    <>
       <p className="text-sm font-bold text-text-muted">{label}</p>
       <p className="mt-4 flex items-baseline gap-1 text-primary">
         <span className="text-4xl font-black tabular-nums">{value}</span>
         <span className="text-base font-black">{suffix}</span>
       </p>
+    </>
+  )
+
+  if (to !== undefined) {
+    return (
+      <Link
+        className="rounded-lg border border-border bg-white p-5 shadow-sm transition hover:border-primary/50 hover:shadow-md"
+        to={to}
+      >
+        {content}
+      </Link>
+    )
+  }
+
+  return (
+    <article className="rounded-lg border border-border bg-white p-5 shadow-sm">
+      {content}
     </article>
   )
 }
@@ -530,7 +553,7 @@ async function fetchJson<T>(url: string, signal: AbortSignal): Promise<T> {
 }
 
 function getTabId(value: string | null): TabId {
-  if (value === 'heatmap' || value === 'checkins') {
+  if (value === 'heatmap' || value === 'photos' || value === 'checkins') {
     return value
   }
 

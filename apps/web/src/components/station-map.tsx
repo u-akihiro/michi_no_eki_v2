@@ -466,6 +466,54 @@ function SearchPanWatcher({
   return null
 }
 
+function QueryStationWatcher({
+  onStationSelect,
+  onZoomChange,
+  stations,
+}: {
+  onStationSelect: (station: Station) => void
+  onZoomChange: (zoom: number) => void
+  stations: Station[]
+}) {
+  const map = useMap()
+  const handledStationIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const stationId = params.get('station')
+
+    if (
+      stationId === null ||
+      stationId.length === 0 ||
+      stationId === handledStationIdRef.current ||
+      stations.length === 0
+    ) {
+      return
+    }
+
+    const station = stations.find((candidate) => candidate.id === stationId)
+
+    if (station === undefined) {
+      return
+    }
+
+    handledStationIdRef.current = stationId
+    onStationSelect(station)
+    map.setView([station.latitude, station.longitude], SEARCH_ZOOM)
+    onZoomChange(map.getZoom())
+
+    params.delete('station')
+    const nextSearch = params.toString()
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${nextSearch.length > 0 ? `?${nextSearch}` : ''}${window.location.hash}`,
+    )
+  }, [map, onStationSelect, onZoomChange, stations])
+
+  return null
+}
+
 function StationMapMarkers({
   onStationSelect,
   pinPhotoIdByStationId,
@@ -1221,6 +1269,10 @@ export function StationMap() {
     ])
   }
 
+  const handleStationSelect = useCallback((station: Station) => {
+    setSelectedStationId(station.id)
+  }, [])
+
   const filterPanel = (
     <StationFilter
       countsByAreaCode={countsByAreaCode}
@@ -1264,9 +1316,14 @@ export function StationMap() {
             stations={filteredStations}
             submittedQuery={submittedQuery}
           />
+          <QueryStationWatcher
+            onStationSelect={handleStationSelect}
+            onZoomChange={setZoom}
+            stations={stations}
+          />
           <MapZoomWatcher onZoomChange={setZoom} />
           <StationMapMarkers
-            onStationSelect={(station) => setSelectedStationId(station.id)}
+            onStationSelect={handleStationSelect}
             pinPhotoIdByStationId={pinPhotoIdByStationId}
             selectedStationId={selectedStationId}
             stations={filteredStations}
