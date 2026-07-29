@@ -45,6 +45,7 @@ const STATION_LABEL_ZOOM_THRESHOLD = 11
 const CLUSTER_FIT_BOUNDS_PADDING = L.point(32, 32)
 const VIEWPORT_PADDING_RATIO = 0.25
 const GEOLOCATION_TIMEOUT_MS = 6000
+const NEARBY_CARD_COLLAPSED_STORAGE_KEY = 'michieki:nearby-card-collapsed'
 
 type PrefectureCluster = {
   prefectureCode: number
@@ -653,9 +654,75 @@ function NearbyStationCard({
   onCheckin: (station: Station) => void
   onSelect: (station: Station) => void
 }) {
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      return (
+        window.localStorage.getItem(NEARBY_CARD_COLLAPSED_STORAGE_KEY) ===
+        'true'
+      )
+    } catch {
+      return false
+    }
+  })
+
+  function updateCollapsed(nextIsCollapsed: boolean) {
+    setIsCollapsed(nextIsCollapsed)
+
+    try {
+      window.localStorage.setItem(
+        NEARBY_CARD_COLLAPSED_STORAGE_KEY,
+        String(nextIsCollapsed),
+      )
+    } catch {
+      // Keep the toggle usable even when storage is unavailable.
+    }
+  }
+
+  if (isCollapsed) {
+    return (
+      <button
+        aria-label="近くの道の駅を開く"
+        className="pointer-events-auto absolute bottom-4 left-4 z-[1000] inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-text shadow-[0_4px_24px_oklch(0.3_0.03_250_/_0.12)] hover:text-primary"
+        onClick={() => updateCollapsed(false)}
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          className="h-4 w-4 shrink-0 text-primary"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <path
+            d="M12 21s7-5.4 7-12a7 7 0 1 0-14 0c0 6.6 7 12 7 12Z"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+          />
+          <circle
+            cx="12"
+            cy="9"
+            r="2.5"
+            stroke="currentColor"
+            strokeWidth="2"
+          />
+        </svg>
+        <span>近くの駅</span>
+      </button>
+    )
+  }
+
   return (
     <div className="pointer-events-auto absolute bottom-4 left-4 z-[1000] w-[min(320px,calc(100vw-2rem))] rounded-xl bg-white p-4 shadow-[0_4px_24px_oklch(0.3_0.03_250_/_0.12)]">
-      <p className="mb-3 text-xs font-black text-text-muted">
+      <button
+        aria-label="近くの道の駅カードを閉じる"
+        className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full text-base font-black leading-none text-text-muted hover:bg-slate-100 hover:text-text"
+        onClick={() => updateCollapsed(true)}
+        type="button"
+      >
+        ⌄
+      </button>
+      <p className="mb-3 pr-7 text-xs font-black text-text-muted">
         現在地から近い道の駅
       </p>
       <div className="flex items-center gap-3">
