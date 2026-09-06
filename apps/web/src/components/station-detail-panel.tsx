@@ -63,12 +63,6 @@ export function StationDetailPanel({
     checkins
       .flatMap((checkin) => photosByCheckinId.get(checkin.id) ?? [])
       .find((photo) => photo.isPinPhoto === 1) ?? null
-  const latestCheckin = checkins[0]
-  const latestFirstPhoto =
-    latestCheckin === undefined
-      ? undefined
-      : photosByCheckinId.get(latestCheckin.id)?.[0]
-  const mainPhoto = pinnedPhoto ?? latestFirstPhoto ?? null
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[1100] overflow-hidden">
@@ -95,11 +89,11 @@ export function StationDetailPanel({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {mainPhoto !== null ? (
+          {pinnedPhoto !== null ? (
             <img
               alt={`${station.name}の写真`}
               className="h-44 w-full bg-slate-100 object-cover md:h-56"
-              src={`/api/photos/${mainPhoto.id}`}
+              src={`/api/photos/${pinnedPhoto.id}`}
             />
           ) : (
             <div className="h-44 bg-[repeating-linear-gradient(135deg,oklch(0.88_0.045_250)_0_10px,oklch(0.95_0.012_245)_10px_20px)] md:h-56" />
